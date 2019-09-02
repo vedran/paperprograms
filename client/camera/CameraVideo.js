@@ -71,7 +71,7 @@ export default class CameraVideo extends React.Component {
   };
 
   _processVideo = () => {
-    setTimeout(this._processVideo);
+    setTimeout(this._processVideo, 1000);
     if (this.props.config.freezeDetection) return;
 
     const displayMat = new cv.Mat(

@@ -187,6 +187,109 @@ export default function detectPrograms({
 
   const videoROI = knobPointsToROI(config.knobPoints, videoMat);
   const clippedVideoMat = videoMat.roi(videoROI);
+
+
+  ///////// EXPERIMENT START
+
+  const defaultParams = {
+    thresholdStep: 10,
+    minThreshold: 50,
+    maxThreshold: 220,
+    minRepeatability: 2,
+    minDistBetweenBlobs: 10,
+
+    filterByColor: true,
+    blobColor: 0,
+
+    filterByArea: true,
+    minArea: 50,
+    maxArea: 5000,
+
+    faster: true,
+    scaleFactor: 4,
+  };
+
+  const params = { ...defaultParams };
+
+  params.minArea /= params.scaleFactor;
+  params.maxArea /= params.scaleFactor;
+
+  const scaledSize = new cv.Size(
+    clippedVideoMat.cols / params.scaleFactor,
+    clippedVideoMat.rows / params.scaleFactor
+  );
+
+  const scaledImage = new cv.Mat(scaledSize, clippedVideoMat.type());
+  cv.resize(clippedVideoMat, scaledImage, scaledSize, 0, 0, cv.INTER_LINEAR);
+
+  //// Simplify and scale the image
+  const grayScaleImage = new cv.Mat(scaledSize, cv.CV_8UC1);
+  cv.cvtColor(scaledImage, grayScaleImage, cv.COLOR_RGB2GRAY);
+
+
+  for (
+    let thresh = params.minThreshold;
+    thresh < params.maxThreshold;
+    thresh += params.thresholdStep
+  ) {
+    const binaryImage = new cv.Mat(scaledSize, cv.CV_8UC1);
+    cv.threshold(grayScaleImage, binaryImage, thresh, 255, cv.THRESH_BINARY);
+
+    const contours = new cv.MatVector();
+    const hierarchy = new cv.Mat();
+
+    const offset = new cv.Point(videoROI.x, videoROI.y)
+
+    /// Find the contours
+    cv.findContours(binaryImage, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE, offset);
+
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
+
+      // Filter out too small or too large contours
+      const area = cv.contourArea(contour);
+      if (area < params.minArea || area > params.maxArea) {
+        continue;
+      }
+
+      const approx = new cv.Mat()
+      cv.approxPolyDP(contour, approx, 0.05 * cv.arcLength(contour, true), true)
+      if (approx.total() !== 3) {
+        continue;
+      }
+
+      const vec = new cv.MatVector()
+      vec.push_back(approx)
+
+      cv.drawContours(displayMat, contours, i, [0, 255, 0, 255])
+      cv.drawContours(displayMat, vec, -1, [0, 0, 255, 255])
+
+      //const moms = cv.moments(contour);
+      //let center = { x: moms.m10 / moms.m00, y: moms.m01 / moms.m00 }
+      //cv.circle(displayMat, { x: center.x, y: center.y }, 3, [255, 0, 0, 255], 2)
+    }
+
+    hierarchy.delete();
+    binaryImage.delete();
+    contours.delete();
+  }
+
+  grayScaleImage.delete();
+  scaledImage.delete();
+  clippedVideoMat.delete();
+  videoMat.delete();
+
+  return {
+    keyPoints: [],
+    programsToRender: [],
+    markers: [],
+    dataToRemember: {},
+    framerate: Math.round(1000 / (Date.now() - startTime)),
+  };
+
+
+  ////////////// EXPERIMENT END
+  
   let allPoints = simpleBlobDetector(clippedVideoMat, {
     filterByCircularity: true,
     minCircularity: 0.9,

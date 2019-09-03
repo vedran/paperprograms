@@ -190,7 +190,7 @@ export default function detectPrograms({
   let allPoints = simpleBlobDetector(clippedVideoMat, {
     filterByCircularity: true,
     minCircularity: 0.9,
-    minArea: 25,
+    minArea: 10,
     filterByInertia: false,
     faster: true,
     scaleFactor,

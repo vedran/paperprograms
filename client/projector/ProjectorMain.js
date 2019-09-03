@@ -22,7 +22,20 @@ export default class ProjectorMain extends React.Component {
       });
   }
   grabCameraImageAndProjectionData = async () => {
-    const cameraImage = await this._videoCapture.grabFrame();
+    let cameraImage
+    try {
+      cameraImage = await this._videoCapture.grabFrame();
+    } catch (e) {
+      this._videoCapture.track.stop()
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: cameraVideoConstraints,
+      })
+
+      this._videoCapture = new ImageCapture(stream.getVideoTracks()[0]);
+      cameraImage = await this._videoCapture.grabFrame();
+    }
 
     const outputCorners = this.props.knobPoints.map(({ x, y }) => ({
       x: x * cameraImage.width,

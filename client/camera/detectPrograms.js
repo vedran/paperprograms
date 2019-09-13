@@ -152,96 +152,10 @@ function colorIndexesForShape(shape, keyPoints, videoMat, colorsRGB) {
   return shapeColors.map(color => colorIndexForColor(color, closestColors));
 }
 
-export default function detectPrograms({
-  config,
-  videoCapture,
-  dataToRemember,
-  displayMat,
-  scaleFactor,
-  allBlobsAreKeyPoints,
-  debugPrograms = [],
-}) {
-  const startTime = Date.now();
-  const paperDotSizes = config.paperDotSizes;
-  const paperDotSizeVariance = // difference min/max size * 2
-    Math.max(1, Math.max.apply(null, paperDotSizes) - Math.min.apply(null, paperDotSizes)) * 2;
-  const avgPaperDotSize = paperDotSizes.reduce((sum, value) => sum + value) / paperDotSizes.length;
-  const markerSizeThreshold = avgPaperDotSize + paperDotSizeVariance;
 
-  const videoMat = new cv.Mat(videoCapture.video.height, videoCapture.video.width, cv.CV_8UC4);
-  videoCapture.read(videoMat);
 
-  const knobPointMatrix = forwardProjectionMatrixForPoints(config.knobPoints);
-  const mapToKnobPointMatrix = point => {
-    return mult(projectPoint(point, knobPointMatrix), { x: videoMat.cols, y: videoMat.rows })
-  };
-
-  if (displayMat) {
-    videoMat.copyTo(displayMat);
-    const knobPoints = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }].map(mapToKnobPointMatrix);
-
-    for (let i = 0; i < 4; i++) {
-      cv.line(displayMat, knobPoints[i], knobPoints[(i + 1) % 4], [255, 0, 0, 255]);
-    }
-  }
-
-  const videoROI = knobPointsToROI(config.knobPoints, videoMat);
-  const clippedVideoMat = videoMat.roi(videoROI);
-  let allPoints = simpleBlobDetector(clippedVideoMat, {
-    filterByCircularity: true,
-    minCircularity: 0.9,
-    minArea: 10,
-    filterByInertia: false,
-    faster: true,
-    scaleFactor,
-  });
-
-  clippedVideoMat.delete();
-  allPoints.forEach(keyPoint => {
-    keyPoint.matchedShape = false; // is true if point has been recognised as part of a shape
-    keyPoint.pt.x += videoROI.x;
-    keyPoint.pt.y += videoROI.y;
-
-    // Give each `keyPoint` an `avgColor` and `colorIndex`.
-    keyPoint.avgColor = keyPointToAvgColor(keyPoint, videoMat);
-    keyPoint.colorIndex =
-      keyPoint.colorIndex || colorIndexForColor(keyPoint.avgColor, config.colorsRGB);
-  });
-
-  let [markers, keyPoints] = allBlobsAreKeyPoints
-    ? [[], allPoints]
-    : partition(allPoints, ({ size }) => size > markerSizeThreshold);
-
-  // Sort by x position. We rely on this when scanning through the circles
-  // to find connected components, and when calibrating.
-  keyPoints = sortBy(keyPoints, keyPoint => keyPoint.pt.x);
-
-  // Build connected components by scanning through the `keyPoints`, which
-  // are sorted by x-position.
-  const neighborIndexes = [];
-  for (let i = 0; i < keyPoints.length; i++) {
-    neighborIndexes[i] = neighborIndexes[i] || [];
-    for (let j = i + 1; j < keyPoints.length; j++) {
-      neighborIndexes[j] = neighborIndexes[j] || [];
-
-      // Break early if we are too far on the right anyway.
-      if (keyPoints[j].pt.x - keyPoints[i].pt.x > keyPoints[i].size * 3) break;
-
-      if (
-        norm(diff(keyPoints[i].pt, keyPoints[j].pt)) <
-        (keyPoints[i].size + keyPoints[j].size) * 0.9
-      ) {
-        neighborIndexes[i].push(j);
-        neighborIndexes[j].push(i);
-
-        if (displayMat && config.showOverlayComponentLines) {
-          // Draw lines between components.
-          cv.line(displayMat, keyPoints[i].pt, keyPoints[j].pt, [255, 255, 255, 255]);
-        }
-      }
-    }
-  }
-
+// Old way to process corners. Relies on a dot that has only one neighbor
+const processCornersFromTerminalPoint = (keyPoints, neighborIndexes, displayMat, videoMat, config) => {
   // Find acyclical shapes of 7, and put ids into `newDataToRemember`.
   const seenIndexes = new window.Set();
   const keyPointSizes = [];
@@ -298,6 +212,292 @@ export default function detectPrograms({
       }
     }
   }
+
+  return { pointsById, directionVectorsById, keyPointSizes }
+}
+
+
+// New way to process corners. Relies on 90 degree angle between corner and neighboring dots
+const processCornersFromRightAngles = (keyPoints, neighborIndexes, displayMat, videoMat, config) => {
+  /* Goal:
+    1. Find each point that has at least 2 neighbours
+    2. Find two baseline neighbours that form a 90 degree angle with the corner
+    3. For each baseline, find the next neighbour that forms a straight line
+  */
+
+  const getNodeAngle = (corner, baseline, node) => {
+    const d1 = diff(corner.pt, baseline.pt);
+    const d2 = diff(corner.pt, node.pt);
+
+    const a1 = Math.atan2(d1.y, d1.x);
+    const a2 = Math.atan2(d2.y, d2.x);
+
+    const sign = a1 > a2 ? 1 : -1;
+    const angle = a1 - a2;
+    const K = -sign * Math.PI * 2;
+
+    return Math.abs(Math.abs(K + angle) < Math.abs(angle) ? K + angle : angle);
+  }
+
+  const getParallelNeighbors = (corner, baselineIndex, neighbors) => {
+    const filtered = neighbors.filter(n => getNodeAngle(corner, keyPoints[baselineIndex], keyPoints[n]) < 0.2)
+    filtered.sort(
+      (a, b) =>
+        getNodeAngle(corner, keyPoints[baselineIndex], keyPoints[a]) -
+        getNodeAngle(corner, keyPoints[baselineIndex], keyPoints[b])
+    );
+
+    return filtered
+  }
+
+  const dfsParallelNeighbours = (corner, baselineIndex, neighbors, seen, remaining) => {
+    const validNeighbors = getParallelNeighbors(corner, baselineIndex, neighbors);
+
+    for (let i = 0; i < validNeighbors.length; i++) {
+      if (seen[validNeighbors[i]]) {
+        continue;
+      }
+
+      seen[validNeighbors[i]] = true;
+
+      if (remaining === 1) {
+        return [validNeighbors[i]]
+      }
+
+      const found = dfsParallelNeighbours(corner, baselineIndex, neighborIndexes[validNeighbors[i]], seen, remaining - 1)
+      if (found.length) {
+        return found.concat(validNeighbors[i])
+      }
+
+      seen[validNeighbors[i]] = false;
+    }
+
+    return []
+  }
+
+  const used = {}
+  const paths = []
+
+  for (let i = 0; i < keyPoints.length; i++) {
+    if (neighborIndexes[i].length < 2) continue;
+    if (used[i]) continue;
+
+    const corner = keyPoints[i];
+
+    for (let j = 0; j < neighborIndexes[i].length - 1; j++) {
+      for (let k = j + 1; k < neighborIndexes[i].length; k++) {
+        const n1Index = neighborIndexes[i][j];
+        const n2Index = neighborIndexes[i][k];
+
+        if (used[n1Index]) continue;
+        if (used[n2Index]) continue;
+
+        const n1 = keyPoints[n1Index];
+        const n2 = keyPoints[n2Index];
+
+        let angle = getNodeAngle(corner, n1, n2);
+        const angleDiff = Math.abs(angle - Math.PI / 2) / (Math.PI / 2);
+
+        let seen = JSON.parse(JSON.stringify(used));
+        if (angleDiff > 0.10) {
+          continue;
+        }
+
+        seen[i] = true;
+        seen[n1Index] = true;
+        seen[n2Index] = true;
+
+        let directionOnePath = [
+          ...dfsParallelNeighbours(corner, n1Index, neighborIndexes[n1Index], seen, 2),
+          n1Index,
+        ];
+
+        let directionTwoPath = [
+          n2Index,
+          ...dfsParallelNeighbours(corner, n2Index, neighborIndexes[n2Index], seen, 2)
+        ];
+
+        if (directionOnePath.length + directionTwoPath.length === 6) {
+          const byDist = (a, b) => {
+            const distA = Math.sqrt(
+              Math.pow(keyPoints[i].pt.x - keyPoints[a].pt.x, 2) +
+              Math.pow(keyPoints[i].pt.y - keyPoints[a].pt.y, 2)
+            )
+
+            const distB = Math.sqrt(
+              Math.pow(keyPoints[i].pt.x - keyPoints[b].pt.x, 2) +
+              Math.pow(keyPoints[i].pt.y - keyPoints[b].pt.y, 2)
+            )
+
+            return distB - distA;
+          }
+
+
+          directionOnePath.sort(byDist);
+          directionTwoPath.sort(byDist);
+          directionTwoPath = directionTwoPath.reverse();
+
+          const path = [...directionOnePath, i, ...directionTwoPath]
+          paths.push(path);
+
+          for (let m = 0; m < path.length; m++) {
+            used[path[m]] = true;
+          }
+        }
+      }
+    }
+  }
+
+  const keyPointSizes = [];
+  const pointsById = {};
+  const directionVectorsById = {};
+
+  paths.map(path => {
+    // Reverse the array if it's the wrong way around.
+    const mag = cross(
+      diff(keyPoints[path[0]].pt, keyPoints[path[3]].pt),
+      diff(keyPoints[path[6]].pt, keyPoints[path[3]].pt)
+    );
+    if (mag > 100) {
+      // Use 100 to avoid straight line. We already depend on sorting by x for that.
+      path.reverse();
+    }
+
+    const colorIndexes = colorIndexesForShape(path, keyPoints, videoMat, config.colorsRGB);
+    const id = shapeToId(colorIndexes);
+    const cornerNum = shapeToCornerNum(colorIndexes);
+
+    if (cornerNum > -1) {
+      // Store the colorIndexes so we can render them later for debugging.
+      colorIndexes.forEach((colorIndex, shapePointIndex) => {
+        keyPoints[path[shapePointIndex]].colorIndex = colorIndex;
+      });
+
+      pointsById[id] = pointsById[id] || [];
+      pointsById[id][cornerNum] = keyPoints[path[3]].pt;
+      directionVectorsById[id] = directionVectorsById[id] || [];
+      directionVectorsById[id][cornerNum] = diff(
+        keyPoints[path[6]].pt,
+        keyPoints[path[3]].pt
+      );
+
+      path.forEach(index => keyPointSizes.push(keyPoints[index].size));
+
+      if (displayMat && config.showOverlayShapeId) {
+        // Draw id and corner name.
+        cv.putText(
+          displayMat,
+          `${id},${cornerNames[cornerNum]}`,
+          div(add(keyPoints[path[0]].pt, keyPoints[path[6]].pt), { x: 2, y: 2 }),
+          cv.FONT_HERSHEY_DUPLEX,
+          0.5,
+          [0, 0, 255, 255]
+        );
+      }
+    }
+  });
+
+  return { pointsById, directionVectorsById, keyPointSizes }
+};
+
+
+export default function detectPrograms({
+  config,
+  videoCapture,
+  dataToRemember,
+  displayMat,
+  scaleFactor,
+  allBlobsAreKeyPoints,
+  debugPrograms = [],
+}) {
+  const startTime = Date.now();
+  const paperDotSizes = config.paperDotSizes;
+  const paperDotSizeVariance = // difference min/max size * 2
+    Math.max(1, Math.max.apply(null, paperDotSizes) - Math.min.apply(null, paperDotSizes)) * 2;
+  const avgPaperDotSize = paperDotSizes.reduce((sum, value) => sum + value) / paperDotSizes.length;
+  const markerSizeThreshold = avgPaperDotSize * 0.5
+
+  const videoMat = new cv.Mat(videoCapture.video.height, videoCapture.video.width, cv.CV_8UC4);
+  videoCapture.read(videoMat);
+
+  const knobPointMatrix = forwardProjectionMatrixForPoints(config.knobPoints);
+  const mapToKnobPointMatrix = point => {
+    return mult(projectPoint(point, knobPointMatrix), { x: videoMat.cols, y: videoMat.rows })
+  };
+
+  if (displayMat) {
+    videoMat.copyTo(displayMat);
+    const knobPoints = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }].map(mapToKnobPointMatrix);
+
+    for (let i = 0; i < 4; i++) {
+      cv.line(displayMat, knobPoints[i], knobPoints[(i + 1) % 4], [255, 0, 0, 255]);
+    }
+  }
+
+  const videoROI = knobPointsToROI(config.knobPoints, videoMat);
+  const clippedVideoMat = videoMat.roi(videoROI);
+  let allPoints = simpleBlobDetector(clippedVideoMat, {
+    filterByCircularity: true,
+    minCircularity: 0.9,
+    minArea: 10,
+    filterByInertia: false,
+    faster: true,
+    scaleFactor,
+  });
+
+  clippedVideoMat.delete();
+  allPoints.forEach(keyPoint => {
+    keyPoint.matchedShape = false; // is true if point has been recognised as part of a shape
+    keyPoint.pt.x += videoROI.x;
+    keyPoint.pt.y += videoROI.y;
+
+    // Give each `keyPoint` an `avgColor` and `colorIndex`.
+    keyPoint.avgColor = keyPointToAvgColor(keyPoint, videoMat);
+    keyPoint.colorIndex =
+      keyPoint.colorIndex || colorIndexForColor(keyPoint.avgColor, config.colorsRGB);
+  });
+
+  let [markers, keyPoints] = allBlobsAreKeyPoints
+    ? [[], allPoints]
+    : [allPoints, allPoints];
+
+
+  // Sort by x position. We rely on this when scanning through the circles
+  // to find connected components, and when calibrating.
+  keyPoints = sortBy(keyPoints, keyPoint => keyPoint.pt.x);
+
+  // Build connected components by scanning through the `keyPoints`, which
+  // are sorted by x-position.
+  const neighborIndexes = [];
+  for (let i = 0; i < keyPoints.length; i++) {
+    neighborIndexes[i] = neighborIndexes[i] || [];
+    for (let j = i + 1; j < keyPoints.length; j++) {
+      neighborIndexes[j] = neighborIndexes[j] || [];
+
+      // Break early if we are too far on the right anyway.
+      if (keyPoints[j].pt.x - keyPoints[i].pt.x > keyPoints[i].size * 3) break;
+
+      if (
+        norm(diff(keyPoints[i].pt, keyPoints[j].pt)) <
+        (keyPoints[i].size + keyPoints[j].size) * 0.9
+      ) {
+        neighborIndexes[i].push(j);
+        neighborIndexes[j].push(i);
+
+        if (displayMat && config.showOverlayComponentLines) {
+          // Draw lines between components.
+          cv.line(displayMat, keyPoints[i].pt, keyPoints[j].pt, [0, 0, 255, 255], 2);
+        }
+      }
+    }
+  }
+
+  const {
+    directionVectorsById,
+    pointsById,
+    keyPointSizes,
+  } = processCornersFromRightAngles(keyPoints, neighborIndexes, displayMat, videoMat, config)
+
   const avgKeyPointSize =
     keyPointSizes.reduce((sum, value) => sum + value, 0) / keyPointSizes.length;
 

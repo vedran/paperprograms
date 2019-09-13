@@ -23,6 +23,7 @@ export default class ProjectorMain extends React.Component {
   }
   grabCameraImageAndProjectionData = async () => {
     let cameraImage
+
     try {
       cameraImage = await this._videoCapture.grabFrame();
     } catch (e) {

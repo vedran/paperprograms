@@ -17,7 +17,7 @@ const defaultParams = {
   blobColor: 0,
 
   filterByArea: true,
-  minArea: 25,
+  minArea: 15,
   maxArea: 5000,
 
   filterByCircularity: false,
@@ -172,8 +172,10 @@ export default function simpleBlobDetector(image, params) {
     thresh < params.maxThreshold;
     thresh += params.thresholdStep
   ) {
+
     const binaryImage = new cv.Mat(scaledSize, cv.CV_8UC1);
     cv.threshold(grayScaleImage, binaryImage, thresh, 255, cv.THRESH_BINARY);
+
     let curCenters = findBlobs(binaryImage, params);
     binaryImage.delete();
 

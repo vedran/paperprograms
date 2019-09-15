@@ -40,7 +40,7 @@ export default class CameraMain extends React.Component {
       } else {
         this.setState({ spaceData: response.body }, () => {
           if (this.props.config.autoPrintEnabled) this._autoPrint();
-          this._programsChange(this.props.pages, this.props.programs);
+          this._programsChange(response.body.pages, response.body.programs);
         });
       }
 
@@ -207,7 +207,7 @@ export default class CameraMain extends React.Component {
                     </div>
                     <select>
                       <option>
-                        Program #123
+                        Program {page.programId}
                       </option>
                       <option>
                         nothing

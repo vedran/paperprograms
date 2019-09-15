@@ -17,11 +17,11 @@ export default class CameraMain extends React.Component {
       pageWidth: 1,
       framerate: 0,
       selectedColorIndex: -1,
-      spaceData: { programs: [] },
+      spaceData: { pages: [], programs: [] },
       autoPrintedNumbers: [],
       isEditingSpaceUrl: false,
       spaceUrlSwitcherValue: props.config.spaceUrl,
-      debugPrograms: [],
+      debugPages: [],
     };
   }
 
@@ -40,7 +40,7 @@ export default class CameraMain extends React.Component {
       } else {
         this.setState({ spaceData: response.body }, () => {
           if (this.props.config.autoPrintEnabled) this._autoPrint();
-          this._programsChange(this.props.paperProgramsProgramsToRender);
+          this._programsChange(this.props.pages, this.props.programs);
         });
       }
 
@@ -83,7 +83,7 @@ export default class CameraMain extends React.Component {
   };
 
   _autoPrint = () => {
-    const toPrint = this.state.spaceData.programs.filter(
+    const toPrint = this.state.spaceData.pages.filter(
       program => !program.printed && !this.state.autoPrintedNumbers.includes(program.number)
     );
     if (toPrint.length > 0) {
@@ -106,14 +106,14 @@ export default class CameraMain extends React.Component {
     );
   };
 
-  _createDebugProgram = number => {
+  _createDebugPage = number => {
     const paperSize = paperSizes[this.props.config.paperSize];
     const widthToHeightRatio = paperSize[0] / paperSize[1];
     const height = 0.2;
     const width = height * widthToHeightRatio;
 
-    const debugPrograms = this.state.debugPrograms;
-    const newProgram = {
+    const debugPages = this.state.debugPages;
+    const newPage = {
       number,
       points: [
         { x: 0.0, y: 0.0 },
@@ -122,29 +122,30 @@ export default class CameraMain extends React.Component {
         { x: 0.0, y: height },
       ],
     };
-    debugPrograms.push(newProgram);
-    this.setState({ debugPrograms });
+    debugPages.push(newPage);
+    this.setState({ debugPages });
   };
 
-  _programsChange = programsToRender => {
+  _programsChange = (pages, programs) => {
     this.props.onProgramsChange(
-      programsToRender
-        .map(program => {
-          const programWithData = this.state.spaceData.programs.find(
-            program2 => program2.number.toString() === program.number.toString()
+      pages
+        .map(page => {
+          const pageWithData = this.state.spaceData.pages.find(
+            page2 => page2.number.toString() === page.number.toString()
           );
-          if (!programWithData) return;
+          if (!pageWithData) return;
           return {
-            ...program,
-            currentCodeUrl: programWithData.currentCodeUrl,
-            currentCodeHash: programWithData.currentCodeHash,
-            debugUrl: programWithData.debugUrl,
-            claimUrl: programWithData.claimUrl,
-            editorInfo: programWithData.editorInfo,
-            codeHasChanged: programWithData.codeHasChanged,
+            ...page,
+            currentCodeUrl: pageWithData.currentCodeUrl,
+            currentCodeHash: pageWithData.currentCodeHash,
+            debugUrl: pageWithData.debugUrl,
+            claimUrl: pageWithData.claimUrl,
+            editorInfo: pageWithData.editorInfo,
+            codeHasChanged: pageWithData.codeHasChanged,
           };
         })
-        .filter(Boolean)
+        .filter(Boolean),
+      programs
     );
   };
 
@@ -164,9 +165,9 @@ export default class CameraMain extends React.Component {
               width={this.state.pageWidth - padding * 3 - sidebarWidth}
               config={this.props.config}
               onConfigChange={this.props.onConfigChange}
-              onProcessVideo={({ programsToRender, markers, framerate }) => {
+              onProcessVideo={({ pages, markers, framerate }) => {
                 this.setState({ framerate });
-                this._programsChange(programsToRender);
+                this._programsChange(pages, this.props.programs);
                 this.props.onMarkersChange(markers);
               }}
               allowSelectingDetectedPoints={this.state.selectedColorIndex !== -1}
@@ -182,10 +183,10 @@ export default class CameraMain extends React.Component {
                 this.props.onConfigChange({ ...this.props.config, colorsRGB, paperDotSizes });
                 this.setState({ selectedColorIndex: -1 });
               }}
-              debugPrograms={this.state.debugPrograms}
-              removeDebugProgram={program => {
-                const debugPrograms = this.state.debugPrograms.filter(p => p !== program);
-                this.setState({ debugPrograms });
+              debugPages={this.state.debugPages}
+              removeDebugPage={program => {
+                const debugPages = this.state.debugPages.filter(p => p !== program);
+                this.setState({ debugPages });
               }}
             />
           </div>
@@ -199,7 +200,7 @@ export default class CameraMain extends React.Component {
             <div className={styles.sidebarSection}>
               <h3>Paper Programs</h3>
               <div className={styles.sidebarSubSection}>
-                {this.state.spaceData.programs.map(page => (
+                {this.state.spaceData.pages.map(page => (
                   <div key={page.number} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ marginRight: 4 }}>
                       Page {page.number} runs
@@ -267,7 +268,7 @@ export default class CameraMain extends React.Component {
               </div>
               <div className={`${styles.sidebarSubSection} ${styles.printQueue}`}>
                 <div>
-                  {this.state.spaceData.programs
+                  {this.state.spaceData.pages
                     .filter(program => !program.printed || this.props.config.showPrintedInQueue)
                     .map(program => (
                       <div
@@ -294,13 +295,13 @@ export default class CameraMain extends React.Component {
                             {program.printed ? '[show]' : '[hide]'}
                           </span>
                         </span>
-                        {this.state.debugPrograms.find(p => p.number === program.number) ===
+                        {this.state.debugPages.find(p => p.number === program.number) ===
                         undefined ? (
                           <span
                             className={styles.printQueueDebug}
                             onClick={event => {
                               event.stopPropagation();
-                              this._createDebugProgram(program.number);
+                              this._createDebugPage(program.number);
                             }}
                           >
                             [Preview]

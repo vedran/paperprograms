@@ -24,31 +24,39 @@ router.get('/program.:spaceName.:number.js', (req, res) => {
 function getSpaceData(req, callback) {
   const { spaceName } = req.params;
   knex('programs')
-    .select('number', 'originalCode', 'currentCode', 'printed', 'editorInfo')
+    .select('id', 'originalCode', 'currentCode', 'printed', 'editorInfo')
     .where({ spaceName })
     .then(programData => {
-      callback({
-        programs: programData.map(program => {
-          const editorInfo = JSON.parse(program.editorInfo || '{}');
+      knex('pages')
+        .select('number', 'programId')
+        .where({ spaceName })
+        .then(pageData => {
+          callback({
+            programs: programData.map(program => {
+              const editorInfo = JSON.parse(program.editorInfo || '{}');
 
-          return {
-            ...program,
-            currentCodeUrl: `program.${spaceName}.${program.number}.js`,
-            currentCodeHash: crypto
-              .createHmac('sha256', '')
-              .update(program.currentCode)
-              .digest('hex'),
-            debugUrl: `/api/spaces/${spaceName}/programs/${program.number}/debugInfo`,
-            claimUrl: `/api/spaces/${spaceName}/programs/${program.number}/claim`,
-            editorInfo: {
-              ...editorInfo,
-              claimed: !!(editorInfo.time && editorInfo.time + editorHandleDuration > Date.now()),
-            },
-            codeHasChanged: program.currentCode !== program.originalCode,
-          };
-        }),
-        spaceName,
-      });
+              return {
+                ...program,
+                currentCodeUrl: `program.${spaceName}.${program.number}.js`,
+                currentCodeHash: crypto
+                  .createHmac('sha256', '')
+                  .update(program.currentCode)
+                  .digest('hex'),
+                debugUrl: `/api/spaces/${spaceName}/programs/${program.number}/debugInfo`,
+                claimUrl: `/api/spaces/${spaceName}/programs/${program.number}/claim`,
+                editorInfo: {
+                  ...editorInfo,
+                  claimed: !!(
+                    editorInfo.time && editorInfo.time + editorHandleDuration > Date.now()
+                  ),
+                },
+                codeHasChanged: program.currentCode !== program.originalCode,
+              };
+            }),
+            pages: pageData,
+            spaceName,
+          });
+        });
     });
 }
 

@@ -1,20 +1,20 @@
 import React from 'react';
 
 import { add } from '../utils';
-import styles from './DebugProgram.css';
+import styles from './DebugPage.css';
 
 export default class CameraMain extends React.Component {
   constructor(props) {
     super(props);
 
     const videoRatio = this.props.videoWidth / this.props.videoHeight;
-    const bl = props.program.points[3];
-    const br = props.program.points[2];
+    const bl = props.page.points[3];
+    const br = props.page.points[2];
     bl.y *= videoRatio;
     br.y *= videoRatio;
 
     this.state = {
-      program: props.program,
+      page: props.page,
       grabbed: false,
       grabbedOffset: { x: 0, y: 0 },
       resizing: false,
@@ -58,20 +58,20 @@ export default class CameraMain extends React.Component {
   _onMouseMove = event => {
     const rect = this._el.getBoundingClientRect();
     const parentRect = this._el.parentElement.getBoundingClientRect();
-    const program = this.state.program;
+    const page = this.state.page;
     if (this.state.grabbed) {
       const x = event.clientX - rect.x - this.state.grabbedOffset.x;
       const y = event.clientY - rect.y - this.state.grabbedOffset.y;
 
       const normx = x / parentRect.width;
       const normy = y / parentRect.height;
-      program.points = program.points.map(point => add(point, { x: normx, y: normy }));
+      page.points = page.points.map(point => add(point, { x: normx, y: normy }));
     }
 
     if (this.state.resizing) {
-      const tr = program.points[1];
-      const br = program.points[2];
-      const bl = program.points[3];
+      const tr = page.points[1];
+      const br = page.points[2];
+      const bl = page.points[3];
 
       const x = event.clientX - parentRect.x;
       const y = event.clientY - parentRect.y;
@@ -84,12 +84,12 @@ export default class CameraMain extends React.Component {
       bl.y = normy;
     }
 
-    this.setState({ program });
+    this.setState({ page });
   };
 
   render() {
-    const tl = this.state.program.points[0];
-    const br = this.state.program.points[2];
+    const tl = this.state.page.points[0];
+    const br = this.state.page.points[2];
     const width = br.x - tl.x;
     const height = br.y - tl.y;
 
@@ -100,7 +100,7 @@ export default class CameraMain extends React.Component {
         onMouseEnter={this._onMouseEnter}
         onMouseLeave={this._onMouseLeave}
         onDrag={this._onDrag}
-        className={styles.program}
+        className={styles.page}
         style={{
           position: 'absolute',
           left: `${tl.x * 100}%`,
@@ -109,7 +109,7 @@ export default class CameraMain extends React.Component {
           height: `${height * 100}%`,
         }}
       >
-        <h3>Program #{this.state.program.number}</h3>
+        <h3>Page #{this.state.page.number}</h3>
 
         <div ref={el => (this._handleEl = el)} className={styles.resizeHandle} />
 

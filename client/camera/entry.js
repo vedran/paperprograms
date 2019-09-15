@@ -41,8 +41,12 @@ localStorage.paperProgramsConfig = JSON.stringify(
   })
 );
 
-if (!localStorage.hasOwnProperty('paperProgramsProgramsToRender')) {
-  localStorage.paperProgramsProgramsToRender = JSON.stringify([]);
+if (!localStorage.hasOwnProperty('pages')) {
+  localStorage.pages = JSON.stringify([]);
+}
+
+if (!localStorage.hasOwnProperty('programs')) {
+  localStorage.programs = JSON.stringify([]);
 }
 
 if (!localStorage.hasOwnProperty('paperProgramsMarkers')) {
@@ -56,7 +60,8 @@ function render() {
   ReactDOM.render(
     <CameraMain
       config={JSON.parse(localStorage.paperProgramsConfig)}
-      paperProgramsProgramsToRender={JSON.parse(localStorage.paperProgramsProgramsToRender)}
+      pages={JSON.parse(localStorage.pages)}
+      programs={JSON.parse(localStorage.programs)}
       onConfigChange={config => {
         localStorage.paperProgramsConfig = JSON.stringify(config);
         render();
@@ -65,8 +70,9 @@ function render() {
         localStorage.paperProgramsMarkers = JSON.stringify(markers);
         render();
       }}
-      onProgramsChange={programs => {
-        localStorage.paperProgramsProgramsToRender = JSON.stringify(programs);
+      onProgramsChange={(pages, programs) => {
+        localStorage.pages = JSON.stringify(pages);
+        localStorage.programs = JSON.stringify(programs);
         render();
       }}
     />,

@@ -401,14 +401,14 @@ const processCornersFromRightAngles = (keyPoints, neighborIndexes, displayMat, v
 };
 
 
-export default function detectPrograms({
+export default function detectPages({
   config,
   videoCapture,
   dataToRemember,
   displayMat,
   scaleFactor,
   allBlobsAreKeyPoints,
-  debugPrograms = [],
+  debugPages = [],
 }) {
   const startTime = Date.now();
   const paperDotSizes = config.paperDotSizes;
@@ -523,7 +523,7 @@ export default function detectPrograms({
     }
   });
 
-  const programsToRender = [];
+  const pages = [];
   const vectorsBetweenCorners = { ...(dataToRemember.vectorsBetweenCorners || {}) };
   Object.keys(pointsById).forEach(id => {
     const points = pointsById[id];
@@ -596,15 +596,15 @@ export default function detectPrograms({
         projectPointToUnitSquare(point, videoMat, config.knobPoints)
       );
 
-      const programToRender = {
+      const page = {
         points: scaledPoints,
         number: id,
         projectionMatrix: forwardProjectionMatrixForPoints(scaledPoints).adjugate(),
       };
-      programsToRender.push(programToRender);
+      pages.push(page);
 
       if (displayMat && config.showOverlayProgram) {
-        const reprojectedPoints = programToRender.points.map(mapToKnobPointMatrix);
+        const reprojectedPoints = page.points.map(mapToKnobPointMatrix);
 
         cv.line(displayMat, reprojectedPoints[0], reprojectedPoints[1], [0, 0, 255, 255]);
         cv.line(displayMat, reprojectedPoints[2], reprojectedPoints[1], [0, 0, 255, 255]);
@@ -621,18 +621,18 @@ export default function detectPrograms({
   });
 
   // Debug programs
-  debugPrograms.forEach(({ points, number }) => {
+  debugPages.forEach(({ points, number }) => {
     const scaledPoints = points.map(point => {
       const absPoint = mult(point, { x: videoMat.cols, y: videoMat.rows });
       return projectPointToUnitSquare(absPoint, videoMat, config.knobPoints);
     });
 
-    const debugProgram = {
+    const debugPage = {
       points: scaledPoints,
       number,
       projectionMatrix: forwardProjectionMatrixForPoints(scaledPoints).adjugate(),
     };
-    programsToRender.push(debugProgram);
+    pages.push(debugPage);
   });
 
   // Markers
@@ -648,7 +648,7 @@ export default function detectPrograms({
 
     // find out on which paper the marker is
     // based on: http://demonstrations.wolfram.com/AnEfficientTestForAPointToBeInAConvexPolygon/
-    const matchingProgram = programsToRender.find(({ points }) => {
+    const matchingPage = pages.find(({ points }) => {
       for (let i = 0; i < 4; i++) {
         const a = i;
         const b = (i + 1) % 4;
@@ -672,8 +672,8 @@ export default function detectPrograms({
 
     return {
       positionOnPaper:
-        matchingProgram && projectPoint(markerPosition, matchingProgram.projectionMatrix),
-      paperNumber: matchingProgram && matchingProgram.number,
+        matchingPage && projectPoint(markerPosition, matchingPage.projectionMatrix),
+      paperNumber: matchingPage && matchingPage.number,
       size,
       position: markerPosition,
       color: avgColor,
@@ -685,7 +685,7 @@ export default function detectPrograms({
 
   return {
     keyPoints,
-    programsToRender,
+    pages,
     markers,
     dataToRemember: { vectorsBetweenCorners },
     framerate: Math.round(1000 / (Date.now() - startTime)),

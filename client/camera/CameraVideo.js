@@ -5,8 +5,8 @@ import * as d3 from 'd3';
 
 import { cornerNames, cameraVideoConstraints } from '../constants';
 import Knob from './Knob';
-import DebugProgram from './DebugProgram';
-import detectPrograms from './detectPrograms';
+import DebugPage from './DebugPage';
+import detectPages from './detectPages';
 import styles from './CameraVideo.css';
 
 export default class CameraVideo extends React.Component {
@@ -81,18 +81,18 @@ export default class CameraVideo extends React.Component {
     );
 
     try {
-      const { programsToRender, markers, keyPoints, dataToRemember, framerate } = detectPrograms({
+      const { pages, markers, keyPoints, dataToRemember, framerate } = detectPages({
         config: this.props.config,
         videoCapture: this._videoCapture,
         dataToRemember: this._dataToRemember,
         displayMat,
         scaleFactor: this.props.config.scaleFactor,
         allBlobsAreKeyPoints: this.props.allowSelectingDetectedPoints,
-        debugPrograms: this.props.debugPrograms,
+        DebugPages: this.propsdebugPages,
       });
       this._dataToRemember = dataToRemember;
       this.setState({ keyPoints });
-      this.props.onProcessVideo({ programsToRender, markers, framerate });
+      this.props.onProcessVideo({ pages, markers, framerate });
     } catch (error) {
       console.log(error); // eslint-disable-line no-console
     }
@@ -137,16 +137,16 @@ export default class CameraVideo extends React.Component {
               height,
             }}
           >
-            {this.props.debugPrograms.map(program => {
+            {this.props.debugPages.map(page => {
               return (
-                <DebugProgram
-                  key={program.number}
-                  program={program}
+                <DebugPage
+                  key={page.number}
+                  page={page}
                   onMouseEnter={() => this._disableZoomer()}
                   onRelease={() => this._attachZoomer()}
                   videoWidth={this.state.videoWidth}
                   videoHeight={this.state.videoHeight}
-                  remove={() => this.props.removeDebugProgram(program)}
+                  remove={() => this.props.removeDebugPage(page)}
                 />
               );
             })}

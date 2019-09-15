@@ -16,7 +16,7 @@ function render(callback) {
     <ProjectorMain
       knobPoints={paperProgramsConfig.knobPoints}
       paperRatio={paperRatio}
-      programsToRender={JSON.parse(localStorage.paperProgramsProgramsToRender || '[]')}
+      programsToRender={JSON.parse(localStorage.pages || '[]')}
       markers={JSON.parse(localStorage.paperProgramsMarkers || '[]')}
       dataByProgramNumber={JSON.parse(localStorage.paperProgramsDataByProgramNumber || '{}')}
       onDataByProgramNumberChange={(dataByProgramNumber, otherCallback) => {

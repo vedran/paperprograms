@@ -197,6 +197,27 @@ export default class CameraMain extends React.Component {
               </a>
             </div>
             <div className={styles.sidebarSection}>
+              <h3>Paper Programs</h3>
+              <div className={styles.sidebarSubSection}>
+                {this.state.spaceData.programs.map(page => (
+                  <div key={page.number} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ marginRight: 4 }}>
+                      Page {page.number} runs
+                    </div>
+                    <select>
+                      <option>
+                        Program #123
+                      </option>
+                      <option>
+                        nothing
+                      </option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {false && <div className={styles.sidebarSection}>
               <h3>Printing</h3>
               <div className={styles.sidebarSubSection}>
                 <span>Paper Size: </span>
@@ -309,7 +330,7 @@ export default class CameraMain extends React.Component {
                 <label htmlFor="autoPrint">auto-print</label>
                 <div className={styles.note}>(start Chrome with "--kiosk-printing" flag)</div>
               </div>
-            </div>
+            </div>}
 
             <div className={styles.sidebarSection}>
               <h3>Calibration</h3>

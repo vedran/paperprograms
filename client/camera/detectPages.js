@@ -56,9 +56,9 @@ function keyPointToAvgColor(keyPoint, videoMat) {
   ];
 
   const whiteMax = [
-    Math.max(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
-    Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
-    Math.max(corners[0][2], corners[1][2], corners[2][2], corners[3][2]),
+    Math.max(1, Math.max(corners[0][0], corners[1][0], corners[2][0], corners[3][0])),
+    Math.max(1, Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1])),
+    Math.max(1, Math.max(corners[0][2], corners[1][2], corners[2][2], corners[3][2])),
     255,
   ];
 

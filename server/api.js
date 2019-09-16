@@ -9,12 +9,12 @@ router.use(require('nocache')());
 
 const knex = require('knex')(require('../knexfile')[process.env.NODE_ENV || 'development']);
 
-router.get('/program.:spaceName.:number.js', (req, res) => {
-  const { spaceName, number } = req.params;
+router.get('/program.:spaceName.:id.js', (req, res) => {
+  const { spaceName, id } = req.params;
   knex
     .select('currentCode')
     .from('programs')
-    .where({ spaceName, number })
+    .where({ spaceName, id })
     .then(selectResult => {
       res.set('Content-Type', 'text/javascript;charset=UTF-8');
       res.send(selectResult[0].currentCode);
@@ -37,13 +37,13 @@ function getSpaceData(req, callback) {
 
               return {
                 ...program,
-                currentCodeUrl: `program.${spaceName}.${program.number}.js`,
+                currentCodeUrl: `program.${spaceName}.${program.id}.js`,
                 currentCodeHash: crypto
                   .createHmac('sha256', '')
                   .update(program.currentCode)
                   .digest('hex'),
-                debugUrl: `/api/spaces/${spaceName}/programs/${program.number}/debugInfo`,
-                claimUrl: `/api/spaces/${spaceName}/programs/${program.number}/claim`,
+                debugUrl: `/api/spaces/${spaceName}/programs/${program.id}/debugInfo`,
+                claimUrl: `/api/spaces/${spaceName}/programs/${program.id}/claim`,
                 editorInfo: {
                   ...editorInfo,
                   claimed: !!(
@@ -95,25 +95,57 @@ router.post('/api/spaces/:spaceName/programs', (req, res) => {
     });
 });
 
-router.put('/api/spaces/:spaceName/programs/:number', (req, res) => {
-  const { spaceName, number } = req.params;
-  const { code } = req.body;
+router.put('/api/spaces/:spaceName/programs/:id', (req, res) => {
+  const { spaceName, id } = req.params;
   if (!code) return res.status(400).send('Missing "code"');
 
   knex('programs')
     .update({ currentCode: code })
-    .where({ spaceName, number })
+    .where({ spaceName, id })
     .then(() => {
       res.json({});
     });
 });
 
-router.post('/api/spaces/:spaceName/programs/:number/markPrinted', (req, res) => {
+// Assign a program to a page
+router.put('/api/spaces/:spaceName/pages/:number/program/:id', (req, res) => {
+  const { spaceName, number, id } = req.params;
+
+  knex('pages')
+    .update({ programId: id })
+    .where({ spaceName, number })
+    .then(() => {
+      debugger
+      getSpaceData(req, spaceData => {
+        res.json(spaceData);
+      });
+    });
+});
+
+
+// Unassign program from page
+router.delete('/api/spaces/:spaceName/pages/:number/program', (req, res) => {
+  const { spaceName, number } = req.params;
+
+  knex('pages')
+    .update({ programId: null })
+    .where({ spaceName, number })
+    .then(() => {
+      getSpaceData(req, spaceData => {
+        res.json(spaceData);
+      });
+    });
+});
+
+
+router.post('/api/spaces/:spaceName/pages/:number/markPrinted', (req, res) => {
+  // TODO: Remove or replace this
+
   const { spaceName, number } = req.params;
   const { printed } = req.body;
   if (printed === undefined) return res.status(400).send('Missing "printed"');
 
-  knex('programs')
+  knex('pages')
     .update({ printed })
     .where({ spaceName, number })
     .then(() => {

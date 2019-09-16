@@ -40,7 +40,7 @@ export default class CameraMain extends React.Component {
       } else {
         this.setState({ spaceData: response.body }, () => {
           if (this.props.config.autoPrintEnabled) this._autoPrint();
-          this._programsChange(response.body.pages, response.body.programs);
+          this._programsChange(this.props.pages, response.body.programs);
         });
       }
 
@@ -54,23 +54,21 @@ export default class CameraMain extends React.Component {
     this.setState({ pageWidth: document.body.clientWidth });
   };
 
-  _print = program => {
+  _print = page => {
     printPage(
-      program.number,
-      codeToName(program.originalCode),
-      codeToPrint(program.originalCode),
+      page.number,
       this.props.config.paperSize
     );
-    this._markPrinted(program, true);
+    this._markPrinted(page, true);
   };
 
   _printCalibration = () => {
     printCalibrationPage(this.props.config.paperSize);
   };
 
-  _markPrinted = (program, printed) => {
+  _markPrinted = (page, printed) => {
     xhr.post(
-      getApiUrl(this.state.spaceData.spaceName, `/programs/${program.number}/markPrinted`),
+      getApiUrl(this.state.spaceData.spaceName, `/pages/${page.number}/markPrinted`),
       { json: { printed } },
       (error, response) => {
         if (error) {
@@ -84,7 +82,7 @@ export default class CameraMain extends React.Component {
 
   _autoPrint = () => {
     const toPrint = this.state.spaceData.pages.filter(
-      program => !program.printed && !this.state.autoPrintedNumbers.includes(program.number)
+      page => !page.printed && !this.state.autoPrintedNumbers.includes(page.number)
     );
     if (toPrint.length > 0) {
       this.setState(
@@ -136,17 +134,32 @@ export default class CameraMain extends React.Component {
           if (!pageWithData) return;
           return {
             ...page,
-            currentCodeUrl: pageWithData.currentCodeUrl,
-            currentCodeHash: pageWithData.currentCodeHash,
-            debugUrl: pageWithData.debugUrl,
-            claimUrl: pageWithData.claimUrl,
-            editorInfo: pageWithData.editorInfo,
-            codeHasChanged: pageWithData.codeHasChanged,
+            programId: pageWithData.programId,
           };
         })
         .filter(Boolean),
       programs
     );
+  };
+
+  _assignProgramToPage = (programId, pageNumber) => {
+    if (!programId) {
+      xhr.delete(getApiUrl(this.state.spaceData.spaceName, `/pages/${pageNumber}/program`),
+        { json: {} },
+        () => { }
+      );
+    } else {
+      xhr.put(getApiUrl(this.state.spaceData.spaceName, `/pages/${pageNumber}/program/${programId}`),
+        { json: {} },
+        (error, response) => {
+          if (error) {
+            console.error(error); // eslint-disable-line no-console
+          } else {
+            this.setState({ spaceData: response.body });
+          }
+        }
+      );
+    }
   };
 
   render() {
@@ -200,21 +213,28 @@ export default class CameraMain extends React.Component {
             <div className={styles.sidebarSection}>
               <h3>Paper Programs</h3>
               <div className={styles.sidebarSubSection}>
-                {this.state.spaceData.pages.map(page => (
-                  <div key={page.number} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                {this.state.spaceData.pages.map(page => {
+                  const curPageProgram = this.state.spaceData.programs.find(p => p.id == page.programId)
+                  return <div key={page.number} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ marginRight: 4 }}>
-                      Page {page.number} runs
+                      <a style={{ cursor: 'pointer' }} onClick={() => this._print(page)}>
+                        Page {page.number}
+                      </a>
+                      &nbsp;
+                      runs
                     </div>
-                    <select>
-                      <option>
-                        Program {page.programId}
-                      </option>
+                    <select defaultValue={page.programId} onChange={(event) => this._assignProgramToPage(event.target.value, page.number)}>
                       <option>
                         nothing
                       </option>
+                      {this.state.spaceData.programs.map(program => (
+                        <option key={program.id} value={program.id}>
+                          {codeToName(program.currentCode)}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                ))}
+                })}
               </div>
             </div>
 
@@ -269,39 +289,39 @@ export default class CameraMain extends React.Component {
               <div className={`${styles.sidebarSubSection} ${styles.printQueue}`}>
                 <div>
                   {this.state.spaceData.pages
-                    .filter(program => !program.printed || this.props.config.showPrintedInQueue)
-                    .map(program => (
+                    .filter(page => !page.printed || this.props.config.showPrintedInQueue)
+                    .map(page => (
                       <div
-                        key={program.number}
+                        key={page.number}
                         className={[
                           styles.printQueueItem,
-                          program.printed
+                          page.printed
                             ? styles.printQueueItemPrinted
                             : styles.printQueueItemNotPrinted,
                         ].join(' ')}
-                        onClick={() => this._print(program)}
+                        onClick={() => this._print(page)}
                       >
                         <span className={styles.printQueueItemContent}>
                           <span className={styles.printQueueItemName}>
-                            <strong>#{program.number}</strong> {codeToName(program.currentCode)}{' '}
+                            <strong>#{page.number}</strong> {codeToName(page.currentCode)}{' '}
                           </span>
                           <span
                             className={styles.printQueueItemToggle}
                             onClick={event => {
                               event.stopPropagation();
-                              this._markPrinted(program, !program.printed);
+                              this._markPrinted(page, !page.printed);
                             }}
                           >
-                            {program.printed ? '[show]' : '[hide]'}
+                            {page.printed ? '[show]' : '[hide]'}
                           </span>
                         </span>
-                        {this.state.debugPages.find(p => p.number === program.number) ===
+                        {this.state.debugPages.find(p => p.number === page.number) ===
                         undefined ? (
                           <span
                             className={styles.printQueueDebug}
                             onClick={event => {
                               event.stopPropagation();
-                              this._createDebugPage(program.number);
+                              this._createDebugPage(page.number);
                             }}
                           >
                             [Preview]

@@ -2,7 +2,6 @@
 
 import colorDiff from 'color-diff';
 import sortBy from 'lodash/sortBy';
-import partition from 'lodash/partition';
 
 import {
   add,
@@ -619,6 +618,7 @@ export default function detectPages({
       }
     }
   });
+
 
   // Debug programs
   debugPages.forEach(({ points, number }) => {

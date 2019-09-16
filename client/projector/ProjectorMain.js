@@ -63,27 +63,38 @@ export default class ProjectorMain extends React.Component {
     const { width, height } = projectorSize();
     const multPoint = { x: width, y: height };
 
-    const papers = {};
-    const programsToRenderByNumber = {};
-    this.props.programsToRender.forEach(program => {
+    const programmedPageByNumber = {};
+    const programById = {};
+
+    this.props.programs.forEach(program => {
+      programById[program.id] = program;
+    });
+
+    this.props.pages.forEach(page => {
+      if(!page.points || !page.programId) return;
+
+      const program = programById[page.programId];
+
       const centerPoint = { x: 0, y: 0 };
-      program.points.forEach(point => {
+      page.points.forEach(point => {
         centerPoint.x += point.x / 4;
         centerPoint.y += point.y / 4;
       });
 
-      papers[program.number] = {
+      programmedPageByNumber[page.number] = {
+        ...program,
+        rawPoints: page.points,
+        number: page.number,
+        programId: page.programId,
         points: {
-          topLeft: mult(program.points[0], multPoint),
-          topRight: mult(program.points[1], multPoint),
-          bottomRight: mult(program.points[2], multPoint),
-          bottomLeft: mult(program.points[3], multPoint),
+          topLeft: mult(page.points[0], multPoint),
+          topRight: mult(page.points[1], multPoint),
+          bottomRight: mult(page.points[2], multPoint),
+          bottomLeft: mult(page.points[3], multPoint),
           center: mult(centerPoint, multPoint),
         },
-        data: this.props.dataByProgramNumber[program.number] || {},
+        data: this.props.dataByPageNumber[page.number] || {},
       };
-
-      programsToRenderByNumber[program.number] = program;
     });
 
     const markers = this.props.markers.map(data => ({
@@ -93,23 +104,24 @@ export default class ProjectorMain extends React.Component {
 
     return (
       <div>
-        {this.props.programsToRender.map(program => (
-          <Program
-            key={`${program.number}-${program.currentCodeHash}`}
-            programsToRenderByNumber={programsToRenderByNumber}
+        {this.props.pages.map(page => {
+          const programmedPage = programmedPageByNumber[page.number];
+
+          return <Program
+            key={`${programmedPage.number}-${programmedPage.currentCodeHash}`}
             markers={markers}
-            programNumber={program.number}
+            programmedPageByNumber={programmedPageByNumber}
+            page={programmedPage}
             grabCameraImageAndProjectionData={this.grabCameraImageAndProjectionData}
-            papers={papers}
             width={width}
             height={height}
             paperRatio={this.props.paperRatio}
             onDataChange={(data, callback) => {
-              this.props.onDataByProgramNumberChange(
+              this.props.onDataByPageNumberChange(
                 {
-                  ...this.props.dataByProgramNumber,
-                  [program.number]: {
-                    ...this.props.dataByProgramNumber[program.number],
+                  ...this.props.dataByPageNumber,
+                  [programmedPage.number]: {
+                    ...this.props.dataByPageNumber[programmedPage.number],
                     ...data,
                   },
                 },
@@ -117,7 +129,7 @@ export default class ProjectorMain extends React.Component {
               );
             }}
           />
-        ))}
+        })}
       </div>
     );
   }

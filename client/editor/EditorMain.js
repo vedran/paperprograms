@@ -11,7 +11,7 @@ export default class EditorMain extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      selectedProgramNumber: '',
+      selectedProgramId: '',
       spaceData: { programs: [] },
       code: '',
       debugInfo: {},
@@ -43,6 +43,8 @@ export default class EditorMain extends React.Component {
   };
 
   _pollDebugUrl = () => {
+    return;
+
     const targetTimeMs = 250;
     const beginTimeMs = Date.now();
 
@@ -55,7 +57,7 @@ export default class EditorMain extends React.Component {
       );
     };
 
-    const program = this._selectedProgram(this.state.selectedProgramNumber);
+    const program = this._selectedProgram(this.state.selectedProgramId);
     if (program) {
       const { editorId } = this.props.editorConfig;
       xhr.post(program.claimUrl, { json: { editorId } }, (error, response) => {
@@ -63,7 +65,7 @@ export default class EditorMain extends React.Component {
           console.error(error); // eslint-disable-line no-console
         } else if (response.statusCode === 400) {
           this.setState({
-            selectedProgramNumber: '',
+            selectedProgramId: '',
             code: '',
             debugInfo: {},
           });
@@ -78,9 +80,9 @@ export default class EditorMain extends React.Component {
   };
 
   _save = () => {
-    const { code, selectedProgramNumber } = this.state;
+    const { code, selectedProgramId } = this.state;
     xhr.put(
-      getApiUrl(this.props.spaceName, `/programs/${selectedProgramNumber}`),
+      getApiUrl(this.props.spaceName, `/programs/${selectedProgramId}`),
       {
         json: { code },
       },
@@ -102,7 +104,7 @@ export default class EditorMain extends React.Component {
           const { body } = response;
           this.setState({
             code,
-            selectedProgramNumber: body.number,
+            selectedProgramId: body.id,
             spaceData: body.spaceData,
             debugInfo: {},
           });
@@ -115,7 +117,7 @@ export default class EditorMain extends React.Component {
     if (window.confirm('This will remove any changes, continue?')) {
       this.setState(
         {
-          code: this._selectedProgram(this.state.selectedProgramNumber).originalCode,
+          code: this._selectedProgram(this.state.selectedProgramId).originalCode,
           debugInfo: {},
         },
         () => {
@@ -131,9 +133,9 @@ export default class EditorMain extends React.Component {
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S, this._save);
   };
 
-  _selectedProgram = selectedProgramNumber => {
+  _selectedProgram = selectedProgramId => {
     return this.state.spaceData.programs.find(
-      program => program.number.toString() === selectedProgramNumber.toString()
+      program => program.id.toString() === selectedProgramId.toString()
     );
   };
 
@@ -142,7 +144,7 @@ export default class EditorMain extends React.Component {
   };
 
   render() {
-    const selectedProgram = this._selectedProgram(this.state.selectedProgramNumber);
+    const selectedProgram = this._selectedProgram(this.state.selectedProgramId);
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     const errors = this.state.debugInfo.errors || [];
     const logs = this.state.debugInfo.logs || [];
@@ -182,35 +184,31 @@ export default class EditorMain extends React.Component {
 
           <div className={styles.sidebarSection}>
             <select
-              value={this.state.selectedProgramNumber}
+              value={this.state.selectedProgramId}
               onChange={event => {
                 if (event.target.value !== '') {
                   this.setState(
                     {
-                      selectedProgramNumber: event.target.value,
+                      selectedProgramId: event.target.value,
                       code: this._selectedProgram(event.target.value).currentCode,
                       debugInfo: {},
                     },
                     () => this._pollDebugUrl()
                   );
                 } else {
-                  this.setState({ selectedProgramNumber: '', code: '', debugInfo: {} });
+                  this.setState({ selectedProgramId: '', code: '', debugInfo: {} });
                 }
               }}
             >
               <option value={''}>- select program -</option>
-              {sortBy(this.state.spaceData.programs, 'number').map(program => {
+              {sortBy(this.state.spaceData.programs, 'id').map(program => {
                 const beingEditedBySomeoneElse =
                   program.editorInfo.claimed &&
                   program.editorInfo.editorId !== this.props.editorConfig.editorId;
 
                 return (
-                  <option
-                    key={program.number}
-                    value={program.number}
-                    disabled={beingEditedBySomeoneElse}
-                  >
-                    #{program.number} {codeToName(program.currentCode)}
+                  <option key={program.id} value={program.id} disabled={beingEditedBySomeoneElse}>
+                    #{program.id} {codeToName(program.currentCode)}
                     {program.printed ? '' : ' (queued to print)'}
                     {beingEditedBySomeoneElse ? ' (being edited)' : ''}
                   </option>

@@ -40,7 +40,7 @@ export default class Program extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      canvasSizeByProgramNumber: {},
+      canvasSizeByPageNumber: {},
       showSupporterCanvasById: {},
       iframe: null,
       paperRatio: this.props.paperRatio,
@@ -49,7 +49,7 @@ export default class Program extends React.Component {
   }
 
   componentDidMount() {
-    this._worker = new Worker(this._program().currentCodeUrl);
+    this._worker = new Worker(this.props.page.currentCodeUrl)
     this._worker.onmessage = this._receiveMessage;
     this._worker.onerror = this._receiveError;
     this._updateDebugData();
@@ -59,10 +59,6 @@ export default class Program extends React.Component {
     this._worker.terminate();
   }
 
-  _program = () => {
-    return this.props.programsToRenderByNumber[this.props.programNumber];
-  };
-
   _receiveMessage = event => {
     const { command, sendData, messageId } = event.data;
 
@@ -70,25 +66,25 @@ export default class Program extends React.Component {
       if (sendData.name === 'number') {
         this._worker.postMessage({
           messageId,
-          receiveData: { object: this._program().number.toString() },
+          receiveData: { object: this.props.page.number.toString() },
         });
       } else if (sendData.name === 'canvas') {
-        const programNumber = sendData.data.number || this._program().number;
+        const pageNumber = sendData.data.number || this.props.page.number;
 
-        if (this.state.canvasSizeByProgramNumber[programNumber]) {
+        if (this.state.canvasSizeByPageNumber[pageNumber]) {
           this._worker.postMessage({ messageId, receiveData: { object: null } });
         } else {
-          this[`_canvasAvailableCallback_${programNumber}`] = canvas => {
+          this[`_canvasAvailableCallback_${pageNumber}`] = canvas => {
             const offscreen = canvas.transferControlToOffscreen();
             this._worker.postMessage({ messageId, receiveData: { object: offscreen } }, [
               offscreen,
             ]);
-            delete this[`_canvasAvailableCallback_${programNumber}`];
+            delete this[`_canvasAvailableCallback_${pageNumber}`];
           };
           this.setState({
-            canvasSizeByProgramNumber: {
-              ...this.state.canvasSizeByProgramNumber,
-              [programNumber]: {
+            canvasSizeByPageNumber: {
+              ...this.state.canvasSizeByPageNumber,
+              [pageNumber]: {
                 width: sendData.data.width || defaultCanvasWidth,
                 height:
                   sendData.data.height ||
@@ -119,7 +115,7 @@ export default class Program extends React.Component {
           });
         }
       } else if (sendData.name === 'papers') {
-        this._worker.postMessage({ messageId, receiveData: { object: this.props.papers } });
+        this._worker.postMessage({ messageId, receiveData: { object: this.props.programmedPageByNumber } });
       } else if (sendData.name === 'markers') {
         this._worker.postMessage({ messageId, receiveData: { object: this.props.markers } });
       } else if (sendData.name === 'camera') {
@@ -169,25 +165,25 @@ export default class Program extends React.Component {
   };
 
   _updateDebugData = throttle(() => {
-    xhr.put(this._program().debugUrl, { json: this.state.debugData }, () => {});
+    xhr.put(this.props.page.debugUrl, { json: this.state.debugData }, () => {});
   }, 300);
 
-  _getCssTransform = (program, width, height) => {
+  _getCssTransform = (page, width, height) => {
     return matrixToCssTransform(
       forwardProjectionMatrixForPoints(
-        program.points.map(point => mult(point, { x: this.props.width, y: this.props.height }))
+        page.rawPoints.map(point => mult(point, { x: this.props.width, y: this.props.height }))
       ).multiply(getCanvasSizeMatrix(width, height))
     );
   };
 
   render() {
-    const program = this._program();
+    const page = this.props.page;
 
     return (
       <div>
         <div
           className={
-            !program.editorInfo.claimed && program.codeHasChanged
+            !page.editorInfo.claimed && page.codeHasChanged
               ? styles.canvasWithChangedCode
               : ''
           }
@@ -197,26 +193,26 @@ export default class Program extends React.Component {
             top: 0,
             width: 200,
             height: 200,
-            transform: this._getCssTransform(this._program(), 200, 200),
+            transform: this._getCssTransform(this.props.page, 200, 200),
             transformOrigin: '0 0 0',
             zIndex: 3,
-            boxShadow: program.editorInfo.claimed
+            boxShadow: page.editorInfo.claimed
               ? `0 0 0 1px ${randomColor({
-                  seed: program.editorInfo.editorId,
-                })} inset`
+                seed: page.editorInfo.editorId,
+              })} inset`
               : '',
           }}
         />
-        {Object.keys(this.state.canvasSizeByProgramNumber).map(programNumberString => {
-          const { width, height } = this.state.canvasSizeByProgramNumber[programNumberString];
-          const programNumber = parseInt(programNumberString, 10);
+        {Object.keys(this.state.canvasSizeByPageNumber).map(pageNumberString => {
+          const { width, height } = this.state.canvasSizeByPageNumber[pageNumberString];
+          const pageNumber = parseInt(pageNumberString, 10);
 
           return (
             <canvas
-              key={`canvas_${programNumberString}`}
+              key={`canvas_${pageNumberString}`}
               ref={el => {
-                if (el && this[`_canvasAvailableCallback_${programNumber}`]) {
-                  this[`_canvasAvailableCallback_${programNumber}`](el);
+                if (el && this[`_canvasAvailableCallback_${pageNumber}`]) {
+                  this[`_canvasAvailableCallback_${pageNumber}`](el);
                 }
               }}
               width={width}
@@ -228,12 +224,12 @@ export default class Program extends React.Component {
                 width,
                 height,
                 transform: this._getCssTransform(
-                  this.props.programsToRenderByNumber[programNumber],
+                  this.props.page,
                   width,
                   height
                 ),
                 transformOrigin: '0 0 0',
-                zIndex: programNumber == program.number ? 1 : 2,
+                zIndex: pageNumber == page.number ? 1 : 2,
               }}
             />
           );
@@ -271,7 +267,7 @@ export default class Program extends React.Component {
       top: 0,
       width: iframeWidth,
       height: iframeHeight,
-      transform: this._getCssTransform(this._program(), iframeWidth, iframeHeight),
+      transform: this._getCssTransform(this.props.page, iframeWidth, iframeHeight),
       transformOrigin: '0 0 0',
       zIndex: 1,
     };

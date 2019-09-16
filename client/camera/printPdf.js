@@ -147,12 +147,12 @@ function printDoc(doc) {
 
 const allColors = ['#ff0000', '#51ff00', '#00ccff', '#130030'];
 
-export function printPage(number, name, code, paperSize) {
+export function printPage(number, paperSize) {
   printDoc(
     drawPage({
       patterns: generatePatterns({ number, allColors }),
-      title: name,
-      code,
+      title: `Page ${number}`,
+      code: '',
       metadata: `${number} @ ${new Date().toISOString().split('T')[0]}`,
       paperSize,
     })

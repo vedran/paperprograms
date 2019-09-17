@@ -80,8 +80,10 @@ export default class CameraVideo extends React.Component {
       cv.CV_8UC4
     );
 
+    let output = null
+
     try {
-      const { pages, markers, keyPoints, dataToRemember, framerate } = detectPages({
+      const { pages, markers, keyPoints, dataToRemember, framerate, out } = detectPages({
         config: this.props.config,
         videoCapture: this._videoCapture,
         dataToRemember: this._dataToRemember,
@@ -93,11 +95,12 @@ export default class CameraVideo extends React.Component {
       this._dataToRemember = dataToRemember;
       this.setState({ keyPoints });
       this.props.onProcessVideo({ pages, markers, framerate });
+      output = out
     } catch (error) {
       console.log(error); // eslint-disable-line no-console
     }
 
-    cv.imshow(this._canvas, displayMat);
+    cv.imshow(this._canvas, output || displayMat);
     displayMat.delete();
   };
 

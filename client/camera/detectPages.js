@@ -399,7 +399,6 @@ const processCornersFromRightAngles = (keyPoints, neighborIndexes, displayMat, v
   return { pointsById, directionVectorsById, keyPointSizes }
 };
 
-
 export default function detectPages({
   config,
   videoCapture,
@@ -435,6 +434,7 @@ export default function detectPages({
 
   const videoROI = knobPointsToROI(config.knobPoints, videoMat);
   const clippedVideoMat = videoMat.roi(videoROI);
+
   let allPoints = simpleBlobDetector(clippedVideoMat, {
     filterByCircularity: true,
     minCircularity: 0.9,
@@ -445,6 +445,7 @@ export default function detectPages({
   });
 
   clippedVideoMat.delete();
+
   allPoints.forEach(keyPoint => {
     keyPoint.matchedShape = false; // is true if point has been recognised as part of a shape
     keyPoint.pt.x += videoROI.x;
@@ -456,10 +457,7 @@ export default function detectPages({
       keyPoint.colorIndex || colorIndexForColor(keyPoint.avgColor, config.colorsRGB);
   });
 
-  let [markers, keyPoints] = allBlobsAreKeyPoints
-    ? [[], allPoints]
-    : [allPoints, allPoints];
-
+  let keyPoints = allPoints
 
   // Sort by x position. We rely on this when scanning through the circles
   // to find connected components, and when calibrating.
@@ -619,6 +617,104 @@ export default function detectPages({
     }
   });
 
+  let markers = []
+
+  const grayImg = new cv.Mat(videoMat.size(), cv.CV_8UC1);
+  cv.cvtColor(videoMat, grayImg, cv.COLOR_RGB2GRAY);
+
+  const threshImg = new cv.Mat(grayImg.size(), cv.CV_8UC1);
+  cv.threshold(
+    grayImg,
+    threshImg,
+    150,
+    255,
+    cv.THRESH_BINARY_INV,
+  );
+
+  pages.forEach(page => {
+    const reprojectedPoints = page.points.map(mapToKnobPointMatrix);
+    const pageContentPoints = cv.matFromArray(4, 1, cv.CV_32SC2,
+      new Uint32Array([
+        reprojectedPoints[0].x, reprojectedPoints[0].y,
+        reprojectedPoints[3].x, reprojectedPoints[3].y,
+        reprojectedPoints[2].x, reprojectedPoints[2].y,
+        reprojectedPoints[1].x, reprojectedPoints[1].y,
+      ])
+    )
+
+    let pts = new cv.MatVector();
+    pts.push_back(pageContentPoints);
+
+    const mask = new cv.Mat(threshImg.size().height, threshImg.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255))
+    cv.fillPoly(mask, pts, [255, 255, 255, 255]);
+
+    const pageContentMat = new cv.Mat(threshImg.size().height, threshImg.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255))
+    cv.bitwise_and(threshImg, threshImg, pageContentMat, mask);
+
+    const contours = new cv.MatVector();
+    const hierarchy = new cv.Mat();
+    cv.findContours(pageContentMat, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    hierarchy.delete()
+  
+    const toDelete = []
+  
+    for (let i = 0; i < contours.size(); ++i) {
+      const contour = contours.get(i);
+      toDelete.push(contours[i])
+
+      const area = cv.contourArea(contour);
+      if (area < avgKeyPointSize) continue;
+
+      const markerRect = cv.minAreaRect(contour);
+      const markerPosition = projectPointToUnitSquare(markerRect.center, videoMat, config.knobPoints);
+
+      const matchingPage = pages.find(({ points }) => {
+        for (let j = 0; j < 4; j++) {
+          const a = j;
+          const b = (j + 1) % 4;
+
+          const sideA = diff(points[a], markerPosition);
+          const sideB = diff(points[b], markerPosition);
+
+          let angle = Math.atan2(sideB.y, sideB.x) - Math.atan2(sideA.y, sideA.x);
+
+          if (sideB.y < 0 && sideA.y > 0) {
+            angle += 2 * Math.PI;
+          }
+
+          if (angle > Math.PI || angle < 0) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (!matchingPage) {
+        continue;
+      }
+
+      const vertices = cv.RotatedRect.points(markerRect);
+      markers.push({
+        paperNumber: matchingPage.number,
+        globalCenter: markerPosition,
+        globalPoints: vertices,
+        paperCenter: projectPoint(markerPosition, matchingPage.projectionMatrix),
+        paperPoints: vertices.map(v => projectPointToUnitSquare(v, videoMat, config.knobPoints)),
+        area,
+      });
+    }
+
+    toDelete.forEach(o => o && o.delete())
+
+    pageContentMat.delete()
+    pageContentPoints.delete()
+    mask.delete()
+    contours.delete();
+  });
+
+  threshImg.delete()
+  grayImg.delete()
 
   // Debug programs
   debugPages.forEach(({ points, number }) => {
@@ -635,51 +731,21 @@ export default function detectPages({
     pages.push(debugPage);
   });
 
-  // Markers
-  markers = markers.map(({ colorIndex, avgColor, pt, size }) => {
-    const markerPosition = projectPointToUnitSquare(pt, videoMat, config.knobPoints);
-
-    const colorName = {
-      0: 'red',
-      1: 'green',
-      2: 'blue',
-      3: 'black',
-    }[colorIndex];
-
-    // find out on which paper the marker is
-    // based on: http://demonstrations.wolfram.com/AnEfficientTestForAPointToBeInAConvexPolygon/
-    const matchingPage = pages.find(({ points }) => {
-      for (let i = 0; i < 4; i++) {
-        const a = i;
-        const b = (i + 1) % 4;
-
-        const sideA = diff(points[a], markerPosition);
-        const sideB = diff(points[b], markerPosition);
-
-        let angle = Math.atan2(sideB.y, sideB.x) - Math.atan2(sideA.y, sideA.x);
-
-        if (sideB.y < 0 && sideA.y > 0) {
-          angle += 2 * Math.PI;
-        }
-
-        if (angle > Math.PI || angle < 0) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    return {
-      positionOnPaper:
-        matchingPage && projectPoint(markerPosition, matchingPage.projectionMatrix),
-      paperNumber: matchingPage && matchingPage.number,
-      size,
-      position: markerPosition,
-      color: avgColor,
-      colorName,
-    };
-  });
+  /* Draw markers
+  markers.forEach(m => {
+    for (let i = 0; i < 4; i++) {
+      cv.line(
+        displayMat,
+        m.globalPoints[i],
+        m.globalPoints[(i + 1) % 4],
+        [0, 255, 0, 255],
+        2,
+        cv.LINE_AA,
+        0
+      );
+    }
+  })
+  */
 
   videoMat.delete();
 

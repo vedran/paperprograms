@@ -97,9 +97,12 @@ export default class ProjectorMain extends React.Component {
       };
     });
 
-    const markers = this.props.markers.map(data => ({
-      ...data,
-      position: mult(data.position, multPoint),
+    const markers = this.props.markers.map(m => ({
+      ...m,
+      //globalCenter: mult(m.globalCenter, multPoint),
+      //globalPoints: m.globalPoints.map(p => mult(p, multPoint)),
+      paperCenter: mult(m.paperCenter, multPoint),
+      paperPoints: m.paperPoints.map(p => mult(p, multPoint)),
     }));
 
     return (

@@ -97,6 +97,7 @@ router.post('/api/spaces/:spaceName/programs', (req, res) => {
 
 router.put('/api/spaces/:spaceName/programs/:id', (req, res) => {
   const { spaceName, id } = req.params;
+  const { code } = req.body;
   if (!code) return res.status(400).send('Missing "code"');
 
   knex('programs')
@@ -115,7 +116,6 @@ router.put('/api/spaces/:spaceName/pages/:number/program/:id', (req, res) => {
     .update({ programId: id })
     .where({ spaceName, number })
     .then(() => {
-      debugger
       getSpaceData(req, spaceData => {
         res.json(spaceData);
       });

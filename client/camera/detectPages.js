@@ -410,10 +410,8 @@ export default function detectPages({
 }) {
   const startTime = Date.now();
   const paperDotSizes = config.paperDotSizes;
-  const paperDotSizeVariance = // difference min/max size * 2
     Math.max(1, Math.max.apply(null, paperDotSizes) - Math.min.apply(null, paperDotSizes)) * 2;
   const avgPaperDotSize = paperDotSizes.reduce((sum, value) => sum + value) / paperDotSizes.length;
-  const markerSizeThreshold = avgPaperDotSize * 0.5
 
   const videoMat = new cv.Mat(videoCapture.video.height, videoCapture.video.width, cv.CV_8UC4);
   videoCapture.read(videoMat);
@@ -443,8 +441,6 @@ export default function detectPages({
     faster: true,
     scaleFactor,
   });
-
-  clippedVideoMat.delete();
 
   allPoints.forEach(keyPoint => {
     keyPoint.matchedShape = false; // is true if point has been recognised as part of a shape
@@ -619,20 +615,27 @@ export default function detectPages({
 
   let markers = []
 
-  const grayImg = new cv.Mat(videoMat.size(), cv.CV_8UC1);
-  cv.cvtColor(videoMat, grayImg, cv.COLOR_RGB2GRAY);
+  const grayImg = new cv.Mat(clippedVideoMat.size(), cv.CV_8UC1);
+  cv.cvtColor(clippedVideoMat, grayImg, cv.COLOR_RGB2GRAY);
 
   const threshImg = new cv.Mat(grayImg.size(), cv.CV_8UC1);
   cv.threshold(
     grayImg,
     threshImg,
-    150,
+    100,
     255,
     cv.THRESH_BINARY_INV,
   );
 
+  let debugMat = null;
+
   pages.forEach(page => {
-    const reprojectedPoints = page.points.map(mapToKnobPointMatrix);
+    const mapToCropped = point => {
+      return diff(mult(projectPoint(point, knobPointMatrix), { x: videoMat.cols, y: videoMat.rows }), videoROI)
+    };
+
+    const reprojectedPoints = page.points.map(mapToCropped)
+
     const pageContentPoints = cv.matFromArray(4, 1, cv.CV_32SC2,
       new Uint32Array([
         reprojectedPoints[0].x, reprojectedPoints[0].y,
@@ -641,7 +644,7 @@ export default function detectPages({
         reprojectedPoints[1].x, reprojectedPoints[1].y,
       ])
     )
-
+    
     let pts = new cv.MatVector();
     pts.push_back(pageContentPoints);
 
@@ -653,19 +656,19 @@ export default function detectPages({
 
     const contours = new cv.MatVector();
     const hierarchy = new cv.Mat();
-    cv.findContours(pageContentMat, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    cv.findContours(pageContentMat, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE, videoROI);
     hierarchy.delete()
-  
+
     const toDelete = []
-  
+
     for (let i = 0; i < contours.size(); ++i) {
       const contour = contours.get(i);
       toDelete.push(contours[i])
-
       const area = cv.contourArea(contour);
       if (area < avgKeyPointSize) continue;
 
       const markerRect = cv.minAreaRect(contour);
+
       const markerPosition = projectPointToUnitSquare(markerRect.center, videoMat, config.knobPoints);
 
       const matchingPage = pages.find(({ points }) => {
@@ -697,7 +700,7 @@ export default function detectPages({
       const vertices = cv.RotatedRect.points(markerRect);
       markers.push({
         paperNumber: matchingPage.number,
-        globalCenter: markerPosition,
+        globalCenter: markerRect.center,
         globalPoints: vertices,
         paperCenter: projectPoint(markerPosition, matchingPage.projectionMatrix),
         paperPoints: vertices.map(v => projectPointToUnitSquare(v, videoMat, config.knobPoints)),
@@ -707,14 +710,15 @@ export default function detectPages({
 
     toDelete.forEach(o => o && o.delete())
 
-    pageContentMat.delete()
-    pageContentPoints.delete()
+    pageContentPoints.delete();
+    pageContentMat.delete();
     mask.delete()
     contours.delete();
   });
 
-  threshImg.delete()
-  grayImg.delete()
+  clippedVideoMat.delete();
+  threshImg.delete();
+  grayImg.delete();
 
   // Debug programs
   debugPages.forEach(({ points, number }) => {
@@ -731,7 +735,6 @@ export default function detectPages({
     pages.push(debugPage);
   });
 
-  /* Draw markers
   markers.forEach(m => {
     for (let i = 0; i < 4; i++) {
       cv.line(
@@ -745,7 +748,6 @@ export default function detectPages({
       );
     }
   })
-  */
 
   videoMat.delete();
 
@@ -755,5 +757,6 @@ export default function detectPages({
     markers,
     dataToRemember: { vectorsBetweenCorners },
     framerate: Math.round(1000 / (Date.now() - startTime)),
+    debugMat,
   };
 }

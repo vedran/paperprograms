@@ -668,7 +668,6 @@ export default function detectPages({
       if (area < avgKeyPointSize) continue;
 
       const markerRect = cv.minAreaRect(contour);
-
       const markerPosition = projectPointToUnitSquare(markerRect.center, videoMat, config.knobPoints);
 
       const matchingPage = pages.find(({ points }) => {
@@ -697,13 +696,14 @@ export default function detectPages({
         continue;
       }
 
-      const vertices = cv.RotatedRect.points(markerRect);
+      const vertices = cv.RotatedRect.points(markerRect).map(v => projectPointToUnitSquare(v, videoMat, config.knobPoints));
+
       markers.push({
         paperNumber: matchingPage.number,
-        globalCenter: markerRect.center,
+        globalCenter: markerPosition,
         globalPoints: vertices,
         paperCenter: projectPoint(markerPosition, matchingPage.projectionMatrix),
-        paperPoints: vertices.map(v => projectPointToUnitSquare(v, videoMat, config.knobPoints)),
+        paperPoints: vertices.map(v => projectPoint(v, matchingPage.projectionMatrix)),
         area,
       });
     }
@@ -735,6 +735,7 @@ export default function detectPages({
     pages.push(debugPage);
   });
 
+  /*
   markers.forEach(m => {
     for (let i = 0; i < 4; i++) {
       cv.line(
@@ -748,6 +749,7 @@ export default function detectPages({
       );
     }
   })
+  */
 
   videoMat.delete();
 

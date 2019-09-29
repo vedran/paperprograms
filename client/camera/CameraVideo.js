@@ -71,7 +71,7 @@ export default class CameraVideo extends React.Component {
   };
 
   _processVideo = () => {
-    setTimeout(this._processVideo, 1000);
+    setTimeout(this._processVideo);
     if (this.props.config.freezeDetection) return;
 
     const displayMat = new cv.Mat(
@@ -95,12 +95,12 @@ export default class CameraVideo extends React.Component {
       this._dataToRemember = dataToRemember;
       this.setState({ keyPoints });
       this.props.onProcessVideo({ pages, markers, framerate });
-      debugMat = debugMatOutput
+      debugMatOutput = debugMat
     } catch (error) {
       console.log(error); // eslint-disable-line no-console
     }
 
-    cv.imshow(this._canvas, output || displayMat);
+    cv.imshow(this._canvas, debugMatOutput || displayMat);
     displayMat.delete();
   };
 

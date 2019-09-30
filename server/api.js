@@ -67,14 +67,12 @@ router.get('/api/spaces/:spaceName', (req, res) => {
 });
 
 const maxNumber = 8400 / 4;
-router.post('/api/spaces/:spaceName/programs', (req, res) => {
+router.post('/api/spaces/:spaceName/pages', (req, res) => {
   const { spaceName } = req.params;
-  const { code } = req.body;
-  if (!code) return res.status(400).send('Missing "code"');
 
   knex
     .select('number')
-    .from('programs')
+    .from('pages')
     .where({ spaceName })
     .then(selectResult => {
       const existingNumbers = selectResult.map(result => result.number);
@@ -85,8 +83,8 @@ router.post('/api/spaces/:spaceName/programs', (req, res) => {
       if (potentialNumbers.length === 0) return res.status(400).send('No more available numbers');
       const number = potentialNumbers[Math.floor(Math.random() * potentialNumbers.length)];
 
-      knex('programs')
-        .insert({ spaceName, number, originalCode: code, currentCode: code })
+      knex('pages')
+        .insert({ spaceName, number })
         .then(() => {
           getSpaceData(req, spaceData => {
             res.json({ number, spaceData });

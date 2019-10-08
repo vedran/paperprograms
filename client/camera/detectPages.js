@@ -151,8 +151,6 @@ function colorIndexesForShape(shape, keyPoints, videoMat, colorsRGB) {
   return shapeColors.map(color => colorIndexForColor(color, closestColors));
 }
 
-
-
 // Old way to process corners. Relies on a dot that has only one neighbor
 const processCornersFromTerminalPoint = (keyPoints, neighborIndexes, displayMat, videoMat, config) => {
   // Find acyclical shapes of 7, and put ids into `newDataToRemember`.
@@ -298,7 +296,7 @@ const processCornersFromRightAngles = (keyPoints, neighborIndexes, displayMat, v
         const angleDiff = Math.abs(angle - Math.PI / 2) / (Math.PI / 2);
 
         let seen = JSON.parse(JSON.stringify(used));
-        if (angleDiff > 0.10) {
+        if (angleDiff > 0.20) {
           continue;
         }
 
@@ -398,6 +396,22 @@ const processCornersFromRightAngles = (keyPoints, neighborIndexes, displayMat, v
 
   return { pointsById, directionVectorsById, keyPointSizes }
 };
+
+function calcColorDiff(c1, c2) {
+  const bc = { R: 255, G: 255, B: 255 };
+  var conv_c1 = colorDiff.rgb_to_lab;
+  var conv_c2 = colorDiff.rgb_to_lab;
+  var rgba_conv = function (x) { return colorDiff.rgba_to_lab(x, bc); };
+  if ("A" in c1) {
+    conv_c1 = rgba_conv;
+  }
+  if ("A" in c2) {
+    conv_c2 = rgba_conv;
+  }
+  c1 = conv_c1(c1);
+  c2 = conv_c2(c2);
+  return colorDiff.diff(c1, c2);
+}
 
 export default function detectPages({
   config,
@@ -622,7 +636,7 @@ export default function detectPages({
   cv.threshold(
     grayImg,
     threshImg,
-    150,
+    100,
     255,
     cv.THRESH_BINARY_INV,
   );
@@ -657,13 +671,13 @@ export default function detectPages({
     const contours = new cv.MatVector();
     const hierarchy = new cv.Mat();
     cv.findContours(pageContentMat, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE, videoROI);
-    hierarchy.delete()
 
     const toDelete = []
 
     for (let i = 0; i < contours.size(); ++i) {
       const contour = contours.get(i);
       toDelete.push(contours[i])
+
       const area = cv.contourArea(contour);
       if (area < avgKeyPointSize) continue;
 
@@ -696,7 +710,52 @@ export default function detectPages({
         continue;
       }
 
+      /*
+      // TODO: Normalize the threshold for including markers properly so that we can improve the camera settings
+      // Figure out why color diff doesn't
+
+      const markerPoint = {
+        pt: {
+          ...markerRect.center,
+        },
+        size: Math.min(markerRect.size.width, markerRect.size.height),
+      }
+
+      const markerAvgColor = keyPointToAvgColor(markerPoint, videoMat);
+      const closestColorIndex = colorIndexForColor(markerAvgColor, config.colorsRGB);
+      const closestColor = config.colorsRGB[closestColorIndex];
+
+      // Black
+      if (closestColorIndex === 3) {
+        continue;
+      }
+
+      // to highlight the differences between colours better
+      const closestColorDiff = calcColorDiff(colorToRGB(markerAvgColor), colorToRGB(closestColor));
+      console.log(closestColorDiff)
+      if (closestColorDiff > 20) {
+        continue;
+      }
+      */
+
+
       const vertices = cv.RotatedRect.points(markerRect).map(v => projectPointToUnitSquare(v, videoMat, config.knobPoints));
+      const verticesRaw = cv.RotatedRect.points(markerRect)
+
+      /*
+      for (let j = 0; j < 4; j++) {
+        cv.line(
+          displayMat,
+          verticesRaw[j],
+          verticesRaw[(j + 1) % 4],
+          [0, 255, 0, 255],
+          2,
+          cv.LINE_AA,
+          0
+        );
+      }
+      */
+
 
       markers.push({
         paperNumber: matchingPage.number,
@@ -708,6 +767,7 @@ export default function detectPages({
       });
     }
 
+    hierarchy.delete()
     toDelete.forEach(o => o && o.delete())
 
     pageContentPoints.delete();
@@ -735,7 +795,6 @@ export default function detectPages({
     pages.push(debugPage);
   });
 
-  /*
   markers.forEach(m => {
     for (let i = 0; i < 4; i++) {
       cv.line(
@@ -749,7 +808,6 @@ export default function detectPages({
       );
     }
   })
-  */
 
   videoMat.delete();
 

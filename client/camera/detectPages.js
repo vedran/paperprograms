@@ -503,7 +503,8 @@ export default function detectPages({
     directionVectorsById,
     pointsById,
     keyPointSizes,
-  } = processCornersFromRightAngles(keyPoints, neighborIndexes, displayMat, videoMat, config)
+  //} = processCornersFromRightAngles(keyPoints, neighborIndexes, displayMat, videoMat, config)
+  } = processCornersFromTerminalPoint(keyPoints, neighborIndexes, displayMat, videoMat, config)
 
   const avgKeyPointSize =
     keyPointSizes.reduce((sum, value) => sum + value, 0) / keyPointSizes.length;

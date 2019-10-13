@@ -3,6 +3,7 @@ import React from 'react';
 import { mult, forwardProjectionMatrixForPoints } from '../utils';
 import Program from './Program';
 import { cameraVideoConstraints } from '../constants';
+import Matter from '../../www/matter.min.js'
 
 function projectorSize() {
   const width = document.body.clientWidth;
@@ -11,6 +12,14 @@ function projectorSize() {
 }
 
 export default class ProjectorMain extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.engine = null;
+    this.renderer = null;
+    this.lastBodies = [];
+  }
+
   componentWillMount() {
     navigator.mediaDevices
       .getUserMedia({
@@ -20,7 +29,25 @@ export default class ProjectorMain extends React.Component {
       .then(stream => {
         this._videoCapture = new ImageCapture(stream.getVideoTracks()[0]);
       });
+
+
+    // create an engine
+    this.engine = Matter.Engine.create();
+    this.engine.world.gravity.y = 0;
+
+    // create a renderer
+    this.renderer = Matter.Render.create({
+      element: document.body,
+      engine: this.engine,
+    });
+
+    // run the engine
+    Matter.Engine.run(this.engine);
+
+    // run the renderer
+    Matter.Render.run(this.renderer);
   }
+
   grabCameraImageAndProjectionData = async () => {
     let cameraImage
 
@@ -97,13 +124,40 @@ export default class ProjectorMain extends React.Component {
       };
     });
 
-    const markers = this.props.markers.map(m => ({
-      ...m,
-      globalCenter: mult(m.globalCenter, multPoint),
-      globalPoints: m.globalPoints.map(p => mult(p, multPoint)),
-      paperCenter: m.paperCenter,
-      paperPoints: m.paperPoints,
-    }));
+    this.lastBodies.forEach(body => {
+      Matter.World.remove(this.engine.world, body)
+    })
+
+    const markers = [];
+    this.props.markers.map(m => {
+      const normalizedMarker = {
+        ...m,
+        globalCenter: mult(m.globalCenter, multPoint),
+        globalPoints: m.globalPoints.map(p => mult(p, multPoint)),
+        paperCenter: m.paperCenter,
+        paperPoints: m.paperPoints,
+      }
+
+      markers.push(normalizedMarker);
+
+      const verts = []
+
+      normalizedMarker.globalPoints.map(p => {
+        verts.push(Matter.Vector.create(p.x, p.y));
+      });
+
+      var markerBody = Matter.Body.create({
+        vertices: verts,
+        position: Matter.Vector.create(
+          normalizedMarker.globalCenter.x,
+          normalizedMarker.globalCenter.y
+        ),
+      });
+
+
+      this.lastBodies.push(markerBody);
+      Matter.World.add(this.engine.world, [markerBody]);
+    });
 
     return (
       <div>

@@ -33,12 +33,15 @@ export default class ProjectorMain extends React.Component {
 
     // create an engine
     this.engine = Matter.Engine.create();
-    this.engine.world.gravity.y = 0;
+    //this.engine.world.gravity.y = 0;
 
     // create a renderer
     this.renderer = Matter.Render.create({
       element: document.body,
       engine: this.engine,
+      options: {
+        wireframes: false,
+      }
     });
 
     // run the engine
@@ -46,6 +49,8 @@ export default class ProjectorMain extends React.Component {
 
     // run the renderer
     Matter.Render.run(this.renderer);
+
+    this.testBody = null
   }
 
   grabCameraImageAndProjectionData = async () => {
@@ -122,7 +127,25 @@ export default class ProjectorMain extends React.Component {
         },
         data: this.props.dataByPageNumber[page.number] || {},
       };
+
+      if (!this.testBody) {
+        const pageCenter = programmedPageByNumber[page.number].points.center;
+        this.testBody = Matter.Bodies.circle(
+          pageCenter.x,
+          pageCenter.y - 100,
+          10,
+          {
+            restitution: 0.5,
+            friction: 0.005,
+          }
+        );
+
+        this.testBody.render.fillStyle = 'green';
+
+        Matter.World.add(this.engine.world, [this.testBody]);
+      }
     });
+
 
     this.lastBodies.forEach(body => {
       Matter.World.remove(this.engine.world, body)
@@ -152,8 +175,11 @@ export default class ProjectorMain extends React.Component {
           normalizedMarker.globalCenter.x,
           normalizedMarker.globalCenter.y
         ),
+        isStatic: true,
+        friction: 0.005,
       });
 
+      markerBody.render.fillStyle = 'blue';
 
       this.lastBodies.push(markerBody);
       Matter.World.add(this.engine.world, [markerBody]);

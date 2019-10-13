@@ -50,7 +50,7 @@ export default class ProjectorMain extends React.Component {
     // run the renderer
     Matter.Render.run(this.renderer);
 
-    this.testBody = null
+    this.testBodyCount = 0;
   }
 
   grabCameraImageAndProjectionData = async () => {
@@ -128,21 +128,30 @@ export default class ProjectorMain extends React.Component {
         data: this.props.dataByPageNumber[page.number] || {},
       };
 
-      if (!this.testBody) {
+      if (this.testBodyCount === 0) {
         const pageCenter = programmedPageByNumber[page.number].points.center;
-        this.testBody = Matter.Bodies.circle(
-          pageCenter.x,
-          pageCenter.y - 100,
-          10,
-          {
-            restitution: 0.5,
-            friction: 0.005,
-          }
-        );
 
-        this.testBody.render.fillStyle = 'green';
+        for (let i = 0; i < 50; i++) {
+          this.testBodyCount += 1;
+          setTimeout(() => {
+            const testBody = Matter.Bodies.circle(
+              pageCenter.x,
+              pageCenter.y - 100,
+              10,
+              {
+                restitution: 0.5,
+                friction: 0.005,
+              }
+            );
 
-        Matter.World.add(this.engine.world, [this.testBody]);
+            testBody.render.fillStyle = 'green';
+            Matter.World.add(this.engine.world, [testBody]);
+
+            setTimeout(() => {
+              Matter.World.remove(this.engine.world, testBody)
+            }, 3000)
+          }, 500 * i)
+        }
       }
     });
 

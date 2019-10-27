@@ -51,6 +51,7 @@ export default class ProjectorMain extends React.Component {
     Matter.Render.run(this.renderer);
 
     this.testBodyCount = 0;
+    this.testBodyMax = 0;
   }
 
   grabCameraImageAndProjectionData = async () => {
@@ -125,13 +126,14 @@ export default class ProjectorMain extends React.Component {
           bottomLeft: mult(page.points[3], multPoint),
           center: mult(centerPoint, multPoint),
         },
+        angle: page.angle,
         data: this.props.dataByPageNumber[page.number] || {},
       };
 
-      if (this.testBodyCount === 0) {
+      if (this.testBodyCount === 0 && this.testBodyMax > 0) {
         const pageCenter = programmedPageByNumber[page.number].points.center;
 
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < testBodyMax; i++) {
           this.testBodyCount += 1;
           setTimeout(() => {
             const testBody = Matter.Bodies.circle(
@@ -196,6 +198,7 @@ export default class ProjectorMain extends React.Component {
 
     return (
       <div>
+        <audio id="music" src="http://localhost:8000/12 Lucifer.mp3" autoPlay/>
         {this.props.pages.map(page => {
           const programmedPage = programmedPageByNumber[page.number];
 
@@ -208,6 +211,10 @@ export default class ProjectorMain extends React.Component {
             width={width}
             height={height}
             paperRatio={this.props.paperRatio}
+            onGlobalVolumeChange={(globalVolume, callback) => {
+              document.getElementById("music").volume = globalVolume;
+              callback();
+            }}
             onDataChange={(data, callback) => {
               this.props.onDataByPageNumberChange(
                 {

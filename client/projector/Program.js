@@ -127,6 +127,7 @@ export default class Program extends React.Component {
             },
             [object.cameraImage]
           );
+        }).catch(e => {
         });
       }
     } else if (command === 'set') {
@@ -134,6 +135,10 @@ export default class Program extends React.Component {
         this.props.onDataChange(sendData.data, () => {
           this._worker.postMessage({ messageId });
         });
+      } else if (sendData.name === 'volume') {
+        this.props.onGlobalVolumeChange(Math.max(Math.min(1, sendData.data), 0), () => {
+          this._worker.postMessage({ messageId });
+        })
       } else if (sendData.name === 'iframe') {
         this.setState({ iframe: sendData.data });
       }

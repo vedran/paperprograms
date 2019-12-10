@@ -423,9 +423,19 @@ export default function detectPages({
   debugPages = [],
 }) {
   const startTime = Date.now();
+
+  /*
+  return {
+    keyPoints: [],
+    pages: [],
+    markers: [],
+    dataToRemember: { },
+    framerate: Math.round(1000 / (Date.now() - startTime)),
+  };
+  */
+
   const paperDotSizes = config.paperDotSizes;
     Math.max(1, Math.max.apply(null, paperDotSizes) - Math.min.apply(null, paperDotSizes)) * 2;
-  const avgPaperDotSize = paperDotSizes.reduce((sum, value) => sum + value) / paperDotSizes.length;
 
   const videoMat = new cv.Mat(videoCapture.video.height, videoCapture.video.width, cv.CV_8UC4);
   videoCapture.read(videoMat);
@@ -447,14 +457,17 @@ export default function detectPages({
   const videoROI = knobPointsToROI(config.knobPoints, videoMat);
   const clippedVideoMat = videoMat.roi(videoROI);
 
-  let allPoints = simpleBlobDetector(clippedVideoMat, {
+  let [allPoints, binaryImg] = simpleBlobDetector(clippedVideoMat, {
     filterByCircularity: true,
     minCircularity: 0.9,
-    minArea: 10,
+    minArea: 5,
     filterByInertia: false,
     faster: true,
     scaleFactor,
+    threshold: config.threshold,
   });
+
+  let debugMat = null;
 
   allPoints.forEach(keyPoint => {
     keyPoint.matchedShape = false; // is true if point has been recognised as part of a shape
@@ -503,8 +516,7 @@ export default function detectPages({
     directionVectorsById,
     pointsById,
     keyPointSizes,
-  //} = processCornersFromRightAngles(keyPoints, neighborIndexes, displayMat, videoMat, config)
-  } = processCornersFromTerminalPoint(keyPoints, neighborIndexes, displayMat, videoMat, config)
+  } = processCornersFromRightAngles(keyPoints, neighborIndexes, displayMat, videoMat, config)
 
   const avgKeyPointSize =
     keyPointSizes.reduce((sum, value) => sum + value, 0) / keyPointSizes.length;
@@ -604,7 +616,76 @@ export default function detectPages({
         projectPointToUnitSquare(point, videoMat, config.knobPoints)
       );
 
+      // points[0] = top left
+      // points[1] = top right
+      // points[2] = bottom right
+      // points[3] = bottom left
+
+      /*
+      const radius = Math.sqrt(
+        Math.pow(scaledPoints[0].pt.x - scaledPoints[0].pt.x, 2) +
+        Math.pow(scaledPoints[1].pt.y - scaledPoints[1].pt.y, 2)
+      )
+      */
+
+      const minX = Math.min(
+        scaledPoints[0].x,
+        scaledPoints[1].x,
+        scaledPoints[2].x,
+        scaledPoints[3].x
+      )
+
+      const maxX = Math.max(
+        scaledPoints[0].x,
+        scaledPoints[1].x,
+        scaledPoints[2].x,
+        scaledPoints[3].x
+      )
+
+      const minY = Math.min(
+        scaledPoints[0].y,
+        scaledPoints[1].y,
+        scaledPoints[2].y,
+        scaledPoints[3].y
+      )
+
+      const maxY = Math.max(
+        scaledPoints[0].y,
+        scaledPoints[1].y,
+        scaledPoints[2].y,
+        scaledPoints[3].y
+      )
+
+      const halfWidth = (maxX - minX) / 2.0;
+      const halfHeight = (maxY - minY) / 2.0;
+
+      const topLeftCornerReal = scaledPoints[0]
+
+      const center = {
+        x: minX + halfWidth,
+        y: minY + halfHeight,
+      }
+
+      const topLeftCornerRef = {
+        x: center.x - halfWidth,
+        y: center.y - halfHeight,
+      }
+
+      /* Draw Paper Angle
+
+      cv.circle(displayMat, mapToKnobPointMatrix(topLeftCornerReal), 10, [255, 255, 0, 255]);
+      cv.circle(displayMat, mapToKnobPointMatrix(center), 10, [0, 0, 255, 255]);
+      cv.circle(displayMat, mapToKnobPointMatrix(topLeftCornerRef), 10, [0, 255, 0, 255]);
+
+      cv.line(displayMat, mapToKnobPointMatrix(topLeftCornerReal),  mapToKnobPointMatrix(center), [255, 0, 0, 255]);
+      cv.line(displayMat, mapToKnobPointMatrix(topLeftCornerRef),  mapToKnobPointMatrix(center), [255, 0, 0, 255]);
+      */
+
+      const angle = Math.atan2(topLeftCornerReal.y - center.y, topLeftCornerReal.x - center.x) -
+        Math.atan2(topLeftCornerRef.y - center.y, topLeftCornerRef.x - center.x);
+
       const page = {
+        angle,
         points: scaledPoints,
         number: id,
         projectionMatrix: forwardProjectionMatrixForPoints(scaledPoints).adjugate(),
@@ -614,15 +695,16 @@ export default function detectPages({
       if (displayMat && config.showOverlayProgram) {
         const reprojectedPoints = page.points.map(mapToKnobPointMatrix);
 
-        cv.line(displayMat, reprojectedPoints[0], reprojectedPoints[1], [0, 0, 255, 255]);
-        cv.line(displayMat, reprojectedPoints[2], reprojectedPoints[1], [0, 0, 255, 255]);
-        cv.line(displayMat, reprojectedPoints[2], reprojectedPoints[3], [0, 0, 255, 255]);
-        cv.line(displayMat, reprojectedPoints[3], reprojectedPoints[0], [0, 0, 255, 255]);
+        cv.line(displayMat, reprojectedPoints[0], reprojectedPoints[1], [0, 0, 255, 255], 3);
+        cv.line(displayMat, reprojectedPoints[2], reprojectedPoints[1], [0, 0, 255, 255], 3);
+        cv.line(displayMat, reprojectedPoints[2], reprojectedPoints[3], [0, 0, 255, 255], 3);
+        cv.line(displayMat, reprojectedPoints[3], reprojectedPoints[0], [0, 0, 255, 255], 3);
         cv.line(
           displayMat,
           div(add(reprojectedPoints[2], reprojectedPoints[3]), { x: 2, y: 2 }),
           div(add(reprojectedPoints[0], reprojectedPoints[1]), { x: 2, y: 2 }),
-          [0, 0, 255, 255]
+          [0, 0, 255, 255],
+          3
         );
       }
     }
@@ -630,19 +712,8 @@ export default function detectPages({
 
   let markers = []
 
-  const grayImg = new cv.Mat(clippedVideoMat.size(), cv.CV_8UC1);
-  cv.cvtColor(clippedVideoMat, grayImg, cv.COLOR_RGB2GRAY);
-
-  const threshImg = new cv.Mat(grayImg.size(), cv.CV_8UC1);
-  cv.threshold(
-    grayImg,
-    threshImg,
-    120,
-    255,
-    cv.THRESH_BINARY_INV,
-  );
-
-  let debugMat = null;
+  const binaryInverted = new cv.Mat(binaryImg.size().height, binaryImg.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255));
+  cv.bitwise_not(binaryImg, binaryInverted);
 
   pages.forEach(page => {
     const mapToCropped = point => {
@@ -663,11 +734,11 @@ export default function detectPages({
     let pts = new cv.MatVector();
     pts.push_back(pageContentPoints);
 
-    const mask = new cv.Mat(threshImg.size().height, threshImg.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255))
+    const mask = new cv.Mat(binaryInverted.size().height, binaryInverted.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255))
     cv.fillPoly(mask, pts, [255, 255, 255, 255]);
 
-    const pageContentMat = new cv.Mat(threshImg.size().height, threshImg.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255))
-    cv.bitwise_and(threshImg, threshImg, pageContentMat, mask);
+    const pageContentMat = new cv.Mat(binaryInverted.size().height, binaryInverted.size().width, cv.CV_8UC1, new cv.Scalar(0, 0, 0, 255))
+    cv.bitwise_and(binaryInverted, binaryInverted, pageContentMat, mask);
 
     const contours = new cv.MatVector();
     const hierarchy = new cv.Mat();
@@ -739,11 +810,10 @@ export default function detectPages({
       }
       */
 
-
       const vertices = cv.RotatedRect.points(markerRect).map(v => projectPointToUnitSquare(v, videoMat, config.knobPoints));
-      const verticesRaw = cv.RotatedRect.points(markerRect)
 
       /*
+      const verticesRaw = cv.RotatedRect.points(markerRect)
       for (let j = 0; j < 4; j++) {
         cv.line(
           displayMat,
@@ -756,7 +826,6 @@ export default function detectPages({
         );
       }
       */
-
 
       markers.push({
         paperNumber: matchingPage.number,
@@ -773,13 +842,14 @@ export default function detectPages({
 
     pageContentPoints.delete();
     pageContentMat.delete();
+
     mask.delete()
     contours.delete();
   });
 
   clippedVideoMat.delete();
-  threshImg.delete();
-  grayImg.delete();
+  binaryImg.delete();
+  binaryInverted.delete();
 
   // Debug programs
   debugPages.forEach(({ points, number }) => {

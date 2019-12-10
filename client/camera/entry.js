@@ -21,6 +21,7 @@ const defaultConfig = {
   freezeDetection: false,
   showPrintedInQueue: false,
   scaleFactor: 4,
+  threshold: 50,
 };
 
 function sanitizeConfig(config) {

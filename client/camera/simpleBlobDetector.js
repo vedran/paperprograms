@@ -12,6 +12,7 @@ const defaultParams = {
   maxThreshold: 220,
   minRepeatability: 2,
   minDistBetweenBlobs: 10,
+  threshold: 120,
 
   filterByColor: true,
   blobColor: 0,
@@ -167,55 +168,59 @@ export default function simpleBlobDetector(image, params) {
   scaledImage.delete();
 
   let centers = [];
+
+  /*
   for (
     let thresh = params.minThreshold;
     thresh < params.maxThreshold;
     thresh += params.thresholdStep
   ) {
+    */
 
     const binaryImage = new cv.Mat(scaledSize, cv.CV_8UC1);
+    const thresh = params.threshold;
     cv.threshold(grayScaleImage, binaryImage, thresh, 255, cv.THRESH_BINARY);
 
     let curCenters = findBlobs(binaryImage, params);
-    binaryImage.delete();
 
     let newCenters = [];
-    for (let i = 0; i < curCenters.length; i++) {
-      curCenters[i].location.x *= params.scaleFactor;
-      curCenters[i].location.y *= params.scaleFactor;
-      curCenters[i].radius *= params.scaleFactor;
+  for (let i = 0; i < curCenters.length; i++) {
+    curCenters[i].location.x *= params.scaleFactor;
+    curCenters[i].location.y *= params.scaleFactor;
+    curCenters[i].radius *= params.scaleFactor;
 
-      let isNew = true;
-      for (let j = 0; j < centers.length; j++) {
-        const dist = norm(
-          diff(centers[j][Math.floor(centers[j].length / 2)].location, curCenters[i].location)
-        );
-        isNew =
-          dist >= params.minDistBetweenBlobs &&
-          dist >= centers[j][Math.floor(centers[j].length / 2)].radius &&
-          dist >= curCenters[i].radius;
-        if (!isNew) {
-          centers[j].push(curCenters[i]);
+    let isNew = true;
+    for (let j = 0; j < centers.length; j++) {
+      const dist = norm(
+        diff(centers[j][Math.floor(centers[j].length / 2)].location, curCenters[i].location)
+      );
+      isNew =
+        dist >= params.minDistBetweenBlobs &&
+        dist >= centers[j][Math.floor(centers[j].length / 2)].radius &&
+        dist >= curCenters[i].radius;
+      if (!isNew) {
+        centers[j].push(curCenters[i]);
 
-          let k = centers[j].length - 1;
-          while (k > 0 && centers[j][k].radius < centers[j][k - 1].radius) {
-            centers[j][k] = centers[j][k - 1];
-            k--;
-          }
-          centers[j][k] = curCenters[i];
-          break;
+        let k = centers[j].length - 1;
+        while (k > 0 && centers[j][k].radius < centers[j][k - 1].radius) {
+          centers[j][k] = centers[j][k - 1];
+          k--;
         }
+        centers[j][k] = curCenters[i];
+        break;
       }
-      if (isNew) newCenters.push([curCenters[i]]);
     }
-    centers = centers.concat(newCenters);
+    if (isNew) newCenters.push([curCenters[i]]);
   }
+  centers = centers.concat(newCenters);
+
+  // }
 
   grayScaleImage.delete();
 
   const keyPoints = [];
   for (let i = 0; i < centers.length; i++) {
-    if (centers[i].length < params.minRepeatability) continue;
+    //if (centers[i].length < params.minRepeatability) continue;
     const sumPoint = { x: 0, y: 0 };
     let normalizer = 0;
     for (let j = 0; j < centers[i].length; j++) {
@@ -236,5 +241,5 @@ export default function simpleBlobDetector(image, params) {
     keyPoints.push({ pt: sumPoint, size });
   }
 
-  return keyPoints;
+  return [ keyPoints, binaryImage ];
 }

@@ -413,6 +413,24 @@ export default class CameraMain extends React.Component {
                 <span>Performance</span>
               </div>
               <div className={styles.sidebarSubSection}>
+                <span>Min Threshold</span>
+                <input
+                  name="threshold"
+                  type="range"
+                  min="50"
+                  max="255"
+                  step="1"
+                  value={this.props.config.threshold}
+                  onChange={event => {
+                    this.props.onConfigChange({
+                      ...this.props.config,
+                      threshold: event.target.valueAsNumber,
+                    });
+                  }}
+                />
+                <span>Max Threshold</span>
+              </div>
+              <div className={styles.sidebarSubSection}>
                 Framerate <strong>{this.state.framerate}</strong>
               </div>
 

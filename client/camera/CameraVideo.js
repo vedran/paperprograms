@@ -101,6 +101,7 @@ export default class CameraVideo extends React.Component {
     }
 
     cv.imshow(this._canvas, debugMatOutput || displayMat);
+
     displayMat.delete();
   };
 
